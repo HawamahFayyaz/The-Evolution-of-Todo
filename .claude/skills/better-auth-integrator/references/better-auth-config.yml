@@ -1,0 +1,74 @@
+# Better Auth Configuration Reference
+
+frontend_setup:
+  installation: "npm install better-auth"
+
+  auth_config:
+    file: "lib/auth.ts"
+    required_fields:
+      - baseURL
+      - database
+      - emailAndPassword
+      - plugins (jwt)
+
+  jwt_plugin:
+    secret: "BETTER_AUTH_SECRET (min 32 chars)"
+    expiresIn: "7d"
+    algorithm: "HS256"
+
+  auth_client:
+    file: "lib/auth-client.ts"
+    exports:
+      - useSession
+      - signIn
+      - signOut
+      - signUp
+
+backend_setup:
+  installation: "pip install pyjwt"
+
+  middleware:
+    file: "app/middleware/auth.py"
+    functions:
+      - verify_jwt_token (async)
+      - get_current_user (dependency)
+
+  jwt_verification:
+    library: "pyjwt"
+    algorithm: "HS256"
+    secret_source: "BETTER_AUTH_SECRET env var"
+    payload_fields:
+      - "sub (user_id)"
+      - "exp (expiration)"
+      - "iat (issued at)"
+
+environment_variables:
+  frontend:
+    - "NEXT_PUBLIC_APP_URL=http://localhost:3000"
+    - "NEXT_PUBLIC_API_URL=http://localhost:8000"
+    - "BETTER_AUTH_SECRET=<same-as-backend>"
+    - "DATABASE_URL=postgresql://..."
+
+  backend:
+    - "BETTER_AUTH_SECRET=<same-as-frontend>"
+    - "DATABASE_URL=postgresql://..."
+
+critical_points:
+  - "MUST use same BETTER_AUTH_SECRET in both frontend and backend"
+  - "Frontend sends JWT in Authorization: Bearer <token> header"
+  - "Backend NEVER trusts client-provided user_id"
+  - "Backend extracts user_id from JWT payload only"
+  - "Always verify task ownership before modify/delete"
+  - "Use HTTPS in production"
+
+common_jwt_payloads:
+  better_auth:
+    sub: "user_id_123"
+    email: "user@example.com"
+    iat: 1735560000
+    exp: 1736164800
+
+  custom:
+    userId: "user_id_123"
+    role: "user"
+    permissions: ["read", "write"]

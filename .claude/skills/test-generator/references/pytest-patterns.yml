@@ -1,0 +1,92 @@
+# Pytest Testing Patterns
+
+test_structure:
+  pattern: "Arrange-Act-Assert (AAA)"
+  example: |
+    def test_create_task():
+        # Arrange: Set up test data
+        user_id = "test_user"
+        title = "Test task"
+
+        # Act: Execute function
+        task = create_task(user_id, title)
+
+        # Assert: Verify results
+        assert task.title == title
+        assert task.user_id == user_id
+
+fixtures:
+  purpose: "Reusable test data and setup"
+  scope_options: ["function", "class", "module", "session"]
+
+  examples:
+    database_session:
+      code: |
+        @pytest.fixture(scope="function")
+        def test_session():
+            engine = create_engine("sqlite:///:memory:")
+            SQLModel.metadata.create_all(engine)
+            with Session(engine) as session:
+                yield session
+            SQLModel.metadata.drop_all(engine)
+
+    authenticated_user:
+      code: |
+        @pytest.fixture
+        def auth_headers():
+            token = create_jwt_token(user_id="test_user")
+            return {"Authorization": f"Bearer {token}"}
+
+parametrized_tests:
+  purpose: "Test multiple scenarios with same logic"
+  example: |
+    @pytest.mark.parametrize("title,expected_status", [
+        ("Valid title", 201),
+        ("", 422),  # Empty title
+        ("A" * 201, 422),  # Too long
+    ])
+    def test_create_task_validation(title, expected_status, auth_headers):
+        response = client.post(
+            "/api/user/tasks",
+            headers=auth_headers,
+            json={"title": title}
+        )
+        assert response.status_code == expected_status
+
+mocking:
+  purpose: "Isolate unit under test from dependencies"
+  libraries: ["unittest.mock", "pytest-mock"]
+
+  examples:
+    mock_external_api:
+      code: |
+        from unittest.mock import patch
+
+        @patch('app.services.external_api_call')
+        def test_service_with_mocked_api(mock_api):
+            mock_api.return_value = {"status": "success"}
+            result = my_service_function()
+            assert result == "success"
+            mock_api.assert_called_once()
+
+async_tests:
+  marker: "@pytest.mark.asyncio"
+  example: |
+    @pytest.mark.asyncio
+    async def test_async_function():
+        result = await async_create_task("Test")
+        assert result is not None
+
+test_naming_convention:
+  pattern: "test_[unit_name]_[scenario]_[expected_result]"
+  examples:
+    - "test_create_task_with_valid_data_succeeds"
+    - "test_create_task_without_title_returns_422"
+    - "test_list_tasks_filters_by_user"
+    - "test_delete_task_soft_deletes_record"
+
+coverage_commands:
+  run_with_coverage: "pytest tests/ --cov=app --cov-report=html"
+  view_report: "open htmlcov/index.html"
+  missing_lines: "pytest tests/ --cov=app --cov-report=term-missing"
+  fail_under_80: "pytest tests/ --cov=app --cov-fail-under=80"

@@ -1,0 +1,180 @@
+# ============================================================
+# DAPR JOBS COMPONENT - Scheduled Event Triggers
+# ============================================================
+# Triggers events on a schedule (cron-like)
+# Use cases:
+#   - Periodic data aggregation
+#   - Scheduled cleanup tasks
+#   - Report generation
+#   - Batch processing triggers
+#
+# Note: Dapr Jobs API is newer - ensure Dapr >= 1.12
+# ============================================================
+
+# ==================== CRON BINDING (Legacy but stable) ====================
+# Uses input binding for scheduled triggers
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: scheduled-hourly-aggregation
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: dapr-job
+spec:
+  type: bindings.cron
+  version: v1
+
+  metadata:
+  # Run every hour at minute 0
+  - name: schedule
+    value: "0 * * * *"
+
+  # Optional: specific direction
+  - name: direction
+    value: "input"
+
+# Scopes: only analytics-aggregator receives this trigger
+scopes:
+  - analytics-aggregator
+
+---
+# ==================== DAILY CLEANUP JOB ====================
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: scheduled-daily-cleanup
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: dapr-job
+spec:
+  type: bindings.cron
+  version: v1
+
+  metadata:
+  # Run daily at 2 AM
+  - name: schedule
+    value: "0 2 * * *"
+
+scopes:
+  - task-processor
+
+---
+# ==================== WEEKLY REPORT JOB ====================
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: scheduled-weekly-report
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: dapr-job
+spec:
+  type: bindings.cron
+  version: v1
+
+  metadata:
+  # Run every Monday at 9 AM
+  - name: schedule
+    value: "0 9 * * 1"
+
+scopes:
+  - analytics-aggregator
+  - notification-sender
+
+---
+# ==================== EVENT RETRY JOB ====================
+# Periodically retry failed events from dead-letter
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: scheduled-retry-dead-letters
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: dapr-job
+spec:
+  type: bindings.cron
+  version: v1
+
+  metadata:
+  # Run every 15 minutes
+  - name: schedule
+    value: "*/15 * * * *"
+
+scopes:
+  - error-handler
+
+---
+# ==================== KUBERNETES CRONJOB ALTERNATIVE ====================
+# For more complex job requirements, use native K8s CronJob
+#
+# apiVersion: batch/v1
+# kind: CronJob
+# metadata:
+#   name: {{app.name}}-daily-aggregation
+#   namespace: {{app.namespace}}
+# spec:
+#   schedule: "0 2 * * *"  # Daily at 2 AM
+#   concurrencyPolicy: Forbid
+#   successfulJobsHistoryLimit: 3
+#   failedJobsHistoryLimit: 3
+#   jobTemplate:
+#     spec:
+#       template:
+#         metadata:
+#           annotations:
+#             dapr.io/enabled: "true"
+#             dapr.io/app-id: "batch-aggregator"
+#         spec:
+#           restartPolicy: OnFailure
+#           containers:
+#           - name: aggregator
+#             image: your-registry/batch-aggregator:latest
+#             env:
+#             - name: DAPR_HTTP_PORT
+#               value: "3500"
+#             - name: JOB_TYPE
+#               value: "daily-aggregation"
+#             command: ["python", "run_aggregation.py"]
+
+---
+# ==================== DAPR JOBS API (Dapr 1.12+) ====================
+# Newer, more powerful job scheduling API
+#
+# To create a job via Dapr Jobs API:
+#
+# POST http://localhost:3500/v1.0-alpha1/jobs/my-job
+# {
+#   "schedule": "@every 1h",
+#   "repeats": 0,  // 0 = infinite
+#   "data": {
+#     "type": "aggregation",
+#     "target": "analytics"
+#   },
+#   "dueTime": "0s"
+# }
+#
+# The job will invoke your app at: POST /job/my-job
+# with the data payload in the body
+
+---
+# ==================== SCHEDULE REFERENCE ====================
+# Cron format: minute hour day-of-month month day-of-week
+#
+# Examples:
+#   "* * * * *"      - Every minute
+#   "0 * * * *"      - Every hour
+#   "0 0 * * *"      - Daily at midnight
+#   "0 0 * * 0"      - Weekly on Sunday
+#   "0 0 1 * *"      - Monthly on 1st
+#   "*/5 * * * *"    - Every 5 minutes
+#   "0 9-17 * * 1-5" - Hourly 9AM-5PM, Mon-Fri
+#
+# Special strings (if supported):
+#   @hourly   - "0 * * * *"
+#   @daily    - "0 0 * * *"
+#   @weekly   - "0 0 * * 0"
+#   @monthly  - "0 0 1 * *"
+#   @yearly   - "0 0 1 1 *"

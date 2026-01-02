@@ -1,0 +1,132 @@
+# ============================================================
+# INGRESS - External HTTP(S) routing for AI Chatbot
+# ============================================================
+# Routes:
+#   /           -> frontend (ChatKit UI)
+#   /api/*      -> backend (FastAPI)
+#   /ws/*       -> backend (WebSocket for streaming)
+#
+# Features:
+#   - TLS/SSL via cert-manager
+#   - WebSocket support for streaming responses
+#   - Increased timeouts for LLM responses
+# ============================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{app.name}}-ingress
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+  annotations:
+    # ==================== NGINX Configuration ====================
+    kubernetes.io/ingress.class: "{{ingress.className}}"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+
+    # Increased timeouts for LLM responses (can take 30+ seconds)
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
+
+    # Larger body size for long conversations
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+
+    # WebSocket support for streaming
+    nginx.ingress.kubernetes.io/proxy-http-version: "1.1"
+    nginx.ingress.kubernetes.io/upstream-hash-by: "$binary_remote_addr"
+
+    # ==================== Cert-Manager ====================
+    cert-manager.io/cluster-issuer: "{{ingress.tls.clusterIssuer}}"
+
+    # ==================== Rate Limiting ====================
+    # Protect against abuse (chatbots can be expensive)
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+
+spec:
+  ingressClassName: {{ingress.className}}
+
+  # TLS Configuration
+  tls:
+  - hosts:
+    - {{ingress.host}}
+    secretName: {{ingress.tls.secretName}}
+
+  rules:
+  - host: {{ingress.host}}
+    http:
+      paths:
+      # ==================== API Routes ====================
+      # Backend API for chat operations
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: {{app.name}}-backend
+            port:
+              number: {{backend.port.service}}
+
+      # Health check endpoint
+      - path: /health
+        pathType: Exact
+        backend:
+          service:
+            name: {{app.name}}-backend
+            port:
+              number: {{backend.port.service}}
+
+      # ==================== WebSocket Route ====================
+      # For streaming chat responses
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: {{app.name}}-backend
+            port:
+              number: {{backend.port.service}}
+
+      # ==================== Frontend (Catch-all) ====================
+      # Everything else goes to frontend
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: {{app.name}}-frontend
+            port:
+              number: {{frontend.port.service}}
+
+---
+# ==================== WEBSOCKET-SPECIFIC INGRESS (Optional) ====================
+# Separate ingress for WebSocket with specific configuration
+# Uncomment if you need different settings for WebSocket
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: {{app.name}}-websocket-ingress
+#   namespace: {{app.namespace}}
+#   annotations:
+#     kubernetes.io/ingress.class: "{{ingress.className}}"
+#     nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+#     nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+#     nginx.ingress.kubernetes.io/upstream-hash-by: "$binary_remote_addr"
+#     nginx.ingress.kubernetes.io/configuration-snippet: |
+#       proxy_set_header Upgrade $http_upgrade;
+#       proxy_set_header Connection "upgrade";
+# spec:
+#   ingressClassName: {{ingress.className}}
+#   tls:
+#   - hosts:
+#     - {{ingress.host}}
+#     secretName: {{ingress.tls.secretName}}
+#   rules:
+#   - host: {{ingress.host}}
+#     http:
+#       paths:
+#       - path: /ws
+#         pathType: Prefix
+#         backend:
+#           service:
+#             name: {{app.name}}-backend
+#             port:
+#               number: {{backend.port.service}}

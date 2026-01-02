@@ -1,0 +1,164 @@
+# ============================================================
+# DEPLOYMENT - Frontend and Backend Pods
+# ============================================================
+# Replace {{PLACEHOLDER}} values from values.yaml
+# Or use with Helm/Kustomize for automatic substitution
+# ============================================================
+
+---
+# ==================== BACKEND DEPLOYMENT ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-backend
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-backend
+    tier: backend
+    environment: {{app.environment}}
+spec:
+  replicas: {{backend.replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-backend
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-backend
+        tier: backend
+        environment: {{app.environment}}
+    spec:
+      # Security: Don't run as root
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: backend
+        image: {{backend.image.repository}}:{{backend.image.tag}}
+        imagePullPolicy: {{backend.image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{backend.port.container}}
+          protocol: TCP
+
+        # Environment from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: {{app.name}}-backend-config
+
+        # Environment from Secrets
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: DATABASE_URL
+        - name: AUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: AUTH_SECRET
+
+        # Resource Limits (REQUIRED for production)
+        resources:
+          requests:
+            cpu: {{backend.resources.requests.cpu}}
+            memory: {{backend.resources.requests.memory}}
+          limits:
+            cpu: {{backend.resources.limits.cpu}}
+            memory: {{backend.resources.limits.memory}}
+
+        # Liveness Probe: Restart container if unhealthy
+        livenessProbe:
+          httpGet:
+            path: {{backend.healthCheck.path}}
+            port: {{backend.port.container}}
+          initialDelaySeconds: {{backend.healthCheck.initialDelaySeconds}}
+          periodSeconds: {{backend.healthCheck.periodSeconds}}
+          timeoutSeconds: {{backend.healthCheck.timeoutSeconds}}
+          failureThreshold: {{backend.healthCheck.failureThreshold}}
+
+        # Readiness Probe: Don't send traffic until ready
+        readinessProbe:
+          httpGet:
+            path: {{backend.healthCheck.path}}
+            port: {{backend.port.container}}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+
+---
+# ==================== FRONTEND DEPLOYMENT ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-frontend
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-frontend
+    tier: frontend
+    environment: {{app.environment}}
+spec:
+  replicas: {{frontend.replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-frontend
+        tier: frontend
+        environment: {{app.environment}}
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+
+      containers:
+      - name: frontend
+        image: {{frontend.image.repository}}:{{frontend.image.tag}}
+        imagePullPolicy: {{frontend.image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{frontend.port.container}}
+          protocol: TCP
+
+        # Environment from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: {{app.name}}-frontend-config
+
+        # Resource Limits
+        resources:
+          requests:
+            cpu: {{frontend.resources.requests.cpu}}
+            memory: {{frontend.resources.requests.memory}}
+          limits:
+            cpu: {{frontend.resources.limits.cpu}}
+            memory: {{frontend.resources.limits.memory}}
+
+        # Liveness Probe
+        livenessProbe:
+          httpGet:
+            path: {{frontend.healthCheck.path}}
+            port: {{frontend.port.container}}
+          initialDelaySeconds: {{frontend.healthCheck.initialDelaySeconds}}
+          periodSeconds: {{frontend.healthCheck.periodSeconds}}
+          timeoutSeconds: {{frontend.healthCheck.timeoutSeconds}}
+          failureThreshold: {{frontend.healthCheck.failureThreshold}}
+
+        # Readiness Probe
+        readinessProbe:
+          httpGet:
+            path: {{frontend.healthCheck.path}}
+            port: {{frontend.port.container}}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3

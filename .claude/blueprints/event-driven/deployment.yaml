@@ -1,0 +1,387 @@
+# ============================================================
+# DEPLOYMENTS - Event-Driven Microservices
+# ============================================================
+# Producer and Consumer services with Dapr sidecar injection
+# Pattern: Each service has Dapr annotations for automatic sidecar
+# ============================================================
+
+---
+# ==================== PRODUCER SERVICE ====================
+# Publishes events to Kafka via Dapr pub/sub
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-producer
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-producer
+    component: producer
+    tier: event-producer
+spec:
+  replicas: {{producer.replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-producer
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-producer
+        component: producer
+      annotations:
+        # ==================== DAPR SIDECAR ANNOTATIONS ====================
+        dapr.io/enabled: "{{producer.dapr.enabled}}"
+        dapr.io/app-id: "{{producer.dapr.appId}}"
+        dapr.io/app-port: "{{producer.dapr.appPort}}"
+        dapr.io/log-level: "{{producer.dapr.logLevel}}"
+        dapr.io/enable-api-logging: "true"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        # Prometheus scraping
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: {{app.name}}-producer
+
+      containers:
+      - name: producer
+        image: {{producer.image.repository}}:{{producer.image.tag}}
+        imagePullPolicy: {{producer.image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{producer.port.container}}
+          protocol: TCP
+
+        env:
+        - name: ENVIRONMENT
+          value: "{{app.environment}}"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: {{app.name}}-producer-config
+              key: LOG_LEVEL
+        - name: DAPR_PUBSUB_NAME
+          value: "{{producer.dapr.pubsubName}}"
+        - name: DAPR_HTTP_PORT
+          value: "3500"
+
+        resources:
+          requests:
+            cpu: {{producer.resources.requests.cpu}}
+            memory: {{producer.resources.requests.memory}}
+          limits:
+            cpu: {{producer.resources.limits.cpu}}
+            memory: {{producer.resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+
+---
+# ==================== CONSUMER: TASK PROCESSOR ====================
+# Subscribes to task events, processes them, updates state
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-task-processor
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-task-processor
+    component: consumer
+    tier: event-consumer
+spec:
+  replicas: {{consumers[0].replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-task-processor
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-task-processor
+        component: consumer
+        consumer-group: task-processing
+      annotations:
+        # Dapr sidecar
+        dapr.io/enabled: "{{consumers[0].dapr.enabled}}"
+        dapr.io/app-id: "{{consumers[0].dapr.appId}}"
+        dapr.io/app-port: "{{consumers[0].dapr.appPort}}"
+        dapr.io/log-level: "{{consumers[0].dapr.logLevel}}"
+        dapr.io/enable-api-logging: "true"
+        dapr.io/enable-metrics: "true"
+        dapr.io/metrics-port: "9090"
+        # Prometheus
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: {{app.name}}-consumer
+
+      containers:
+      - name: task-processor
+        image: {{consumers[0].image.repository}}:{{consumers[0].image.tag}}
+        imagePullPolicy: {{consumers[0].image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{consumers[0].port.container}}
+          protocol: TCP
+
+        env:
+        - name: ENVIRONMENT
+          value: "{{app.environment}}"
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: {{app.name}}-consumer-config
+              key: LOG_LEVEL
+        - name: DAPR_PUBSUB_NAME
+          value: "{{consumers[0].dapr.pubsubName}}"
+        - name: DAPR_STATE_STORE
+          value: "{{consumers[0].dapr.stateStore}}"
+        - name: ENABLE_IDEMPOTENCY
+          value: "{{consumers[0].env.ENABLE_IDEMPOTENCY}}"
+        - name: DAPR_HTTP_PORT
+          value: "3500"
+
+        resources:
+          requests:
+            cpu: {{consumers[0].resources.requests.cpu}}
+            memory: {{consumers[0].resources.requests.memory}}
+          limits:
+            cpu: {{consumers[0].resources.limits.cpu}}
+            memory: {{consumers[0].resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+
+---
+# ==================== CONSUMER: NOTIFICATION SENDER ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-notification-sender
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-notification-sender
+    component: consumer
+    tier: event-consumer
+spec:
+  replicas: {{consumers[1].replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-notification-sender
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-notification-sender
+        component: consumer
+        consumer-group: notifications
+      annotations:
+        dapr.io/enabled: "{{consumers[1].dapr.enabled}}"
+        dapr.io/app-id: "{{consumers[1].dapr.appId}}"
+        dapr.io/app-port: "{{consumers[1].dapr.appPort}}"
+        dapr.io/log-level: "{{consumers[1].dapr.logLevel}}"
+        dapr.io/enable-api-logging: "true"
+        dapr.io/enable-metrics: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: {{app.name}}-consumer
+
+      containers:
+      - name: notification-sender
+        image: {{consumers[1].image.repository}}:{{consumers[1].image.tag}}
+        imagePullPolicy: {{consumers[1].image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{consumers[1].port.container}}
+
+        env:
+        - name: ENVIRONMENT
+          value: "{{app.environment}}"
+        - name: LOG_LEVEL
+          value: "{{consumers[1].env.LOG_LEVEL}}"
+        - name: DAPR_PUBSUB_NAME
+          value: "{{consumers[1].dapr.pubsubName}}"
+        - name: SMTP_HOST
+          value: "{{consumers[1].env.SMTP_HOST}}"
+        - name: SMTP_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: SMTP_PASSWORD
+
+        resources:
+          requests:
+            cpu: {{consumers[1].resources.requests.cpu}}
+            memory: {{consumers[1].resources.requests.memory}}
+          limits:
+            cpu: {{consumers[1].resources.limits.cpu}}
+            memory: {{consumers[1].resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 15
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 10
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+
+---
+# ==================== CONSUMER: ANALYTICS AGGREGATOR ====================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-analytics-aggregator
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-analytics-aggregator
+    component: consumer
+    tier: event-consumer
+spec:
+  replicas: {{consumers[2].replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-analytics-aggregator
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-analytics-aggregator
+        component: consumer
+        consumer-group: analytics
+      annotations:
+        dapr.io/enabled: "{{consumers[2].dapr.enabled}}"
+        dapr.io/app-id: "{{consumers[2].dapr.appId}}"
+        dapr.io/app-port: "{{consumers[2].dapr.appPort}}"
+        dapr.io/log-level: "{{consumers[2].dapr.logLevel}}"
+        dapr.io/enable-api-logging: "true"
+        dapr.io/enable-metrics: "true"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+    spec:
+      serviceAccountName: {{app.name}}-consumer
+
+      containers:
+      - name: analytics-aggregator
+        image: {{consumers[2].image.repository}}:{{consumers[2].image.tag}}
+        imagePullPolicy: {{consumers[2].image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{consumers[2].port.container}}
+
+        env:
+        - name: ENVIRONMENT
+          value: "{{app.environment}}"
+        - name: LOG_LEVEL
+          value: "{{consumers[2].env.LOG_LEVEL}}"
+        - name: DAPR_PUBSUB_NAME
+          value: "{{consumers[2].dapr.pubsubName}}"
+        - name: DAPR_STATE_STORE
+          value: "{{consumers[2].dapr.stateStore}}"
+        - name: AGGREGATION_WINDOW_SECONDS
+          value: "{{consumers[2].env.AGGREGATION_WINDOW_SECONDS}}"
+
+        resources:
+          requests:
+            cpu: {{consumers[2].resources.requests.cpu}}
+            memory: {{consumers[2].resources.requests.memory}}
+          limits:
+            cpu: {{consumers[2].resources.limits.cpu}}
+            memory: {{consumers[2].resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: /health/live
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 20
+
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          readOnlyRootFilesystem: true
+          allowPrivilegeEscalation: false
+
+---
+# ==================== SERVICE ACCOUNTS ====================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{app.name}}-producer
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-producer
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{app.name}}-consumer
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-consumer

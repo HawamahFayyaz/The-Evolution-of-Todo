@@ -1,0 +1,163 @@
+# ============================================================
+# CONFIGMAPS - Non-sensitive configuration
+# ============================================================
+# Backend: OpenAI settings, MCP server URL, feature flags
+# MCP Server: Available tools, database queries
+# ============================================================
+
+---
+# ==================== BACKEND CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-backend-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-backend
+    component: backend
+data:
+  # Application Settings
+  ENVIRONMENT: "{{app.environment}}"
+  LOG_LEVEL: "{{backend.env.LOG_LEVEL}}"
+
+  # ==================== LLM Configuration ====================
+  # OpenAI Settings
+  OPENAI_MODEL: "gpt-4o"
+  OPENAI_MAX_TOKENS: "4096"
+  OPENAI_TEMPERATURE: "0.7"
+
+  # Alternative: Use different provider
+  # LLM_PROVIDER: "openai"  # openai | anthropic | local
+
+  # For local LLM (Ollama, vLLM, etc.)
+  # LOCAL_LLM_URL: "http://ollama:11434"
+  # LOCAL_LLM_MODEL: "llama2"
+
+  # ==================== MCP Configuration ====================
+  MCP_SERVER_URL: "http://{{app.name}}-mcp-server:{{mcpServer.port.service}}"
+  MCP_TIMEOUT_SECONDS: "30"
+
+  # ==================== Chat Settings ====================
+  # Maximum messages to load from history per request
+  MAX_HISTORY_MESSAGES: "50"
+
+  # Maximum conversation length (to control costs)
+  MAX_CONVERSATION_TOKENS: "8000"
+
+  # System prompt (can be customized per deployment)
+  SYSTEM_PROMPT: |
+    You are a helpful AI assistant that can manage tasks for the user.
+    You have access to tools for creating, listing, completing, and deleting tasks.
+    Always be helpful, concise, and use the tools when the user asks about tasks.
+    When listing tasks, format them nicely for the user to read.
+
+  # ==================== CORS ====================
+  CORS_ORIGINS: "https://{{ingress.host}},http://localhost:3000"
+
+  # ==================== Rate Limiting ====================
+  RATE_LIMIT_REQUESTS: "100"
+  RATE_LIMIT_WINDOW_SECONDS: "60"
+
+---
+# ==================== MCP SERVER CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-mcp-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-mcp-server
+    component: mcp-server
+data:
+  # Application Settings
+  ENVIRONMENT: "{{app.environment}}"
+  LOG_LEVEL: "info"
+
+  # ==================== Available Tools ====================
+  # JSON list of enabled MCP tools
+  ENABLED_TOOLS: |
+    [
+      {
+        "name": "list_tasks",
+        "description": "List all tasks for the current user",
+        "parameters": {
+          "status": {
+            "type": "string",
+            "enum": ["all", "pending", "completed"],
+            "default": "all"
+          }
+        }
+      },
+      {
+        "name": "add_task",
+        "description": "Create a new task",
+        "parameters": {
+          "title": {
+            "type": "string",
+            "required": true
+          },
+          "description": {
+            "type": "string"
+          },
+          "due_date": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      {
+        "name": "complete_task",
+        "description": "Mark a task as completed",
+        "parameters": {
+          "task_id": {
+            "type": "integer",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "delete_task",
+        "description": "Delete a task",
+        "parameters": {
+          "task_id": {
+            "type": "integer",
+            "required": true
+          }
+        }
+      },
+      {
+        "name": "search_tasks",
+        "description": "Search tasks by keyword",
+        "parameters": {
+          "query": {
+            "type": "string",
+            "required": true
+          }
+        }
+      }
+    ]
+
+  # Tool execution timeout
+  TOOL_TIMEOUT_SECONDS: "10"
+
+---
+# ==================== FRONTEND CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-frontend-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-frontend
+    component: frontend
+data:
+  # These are build-time variables for Next.js
+  # Actual values should be set in the Docker build or values.yaml
+  NEXT_PUBLIC_APP_NAME: "{{frontend.env.NEXT_PUBLIC_APP_NAME}}"
+  NEXT_PUBLIC_API_URL: "{{frontend.env.NEXT_PUBLIC_API_URL}}"
+  NEXT_PUBLIC_WS_URL: "{{frontend.env.NEXT_PUBLIC_WS_URL}}"
+
+  # ChatKit UI Configuration
+  NEXT_PUBLIC_ENABLE_STREAMING: "true"
+  NEXT_PUBLIC_SHOW_TOOL_CALLS: "true"
+  NEXT_PUBLIC_MAX_MESSAGE_LENGTH: "4000"

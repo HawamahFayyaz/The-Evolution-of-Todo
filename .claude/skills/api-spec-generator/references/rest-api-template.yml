@@ -1,0 +1,158 @@
+# REST API Specification Template
+
+endpoint_structure:
+  title: "### [METHOD] [PATH]"
+  sections:
+    - purpose
+    - authentication
+    - authorization
+    - request_headers
+    - path_parameters
+    - query_parameters
+    - request_body
+    - success_response
+    - error_responses
+    - idempotency
+    - rate_limiting
+    - performance_expectations
+    - business_rules
+    - edge_cases
+    - mcp_tool_mapping
+
+http_methods:
+  GET:
+    purpose: "Retrieve resource(s)"
+    idempotent: true
+    request_body: false
+    success_codes: [200]
+
+  POST:
+    purpose: "Create new resource"
+    idempotent: false
+    request_body: true
+    success_codes: [201]
+
+  PUT:
+    purpose: "Replace entire resource"
+    idempotent: true
+    request_body: true
+    success_codes: [200]
+
+  PATCH:
+    purpose: "Update partial resource"
+    idempotent: false
+    request_body: true
+    success_codes: [200]
+
+  DELETE:
+    purpose: "Remove resource (soft delete)"
+    idempotent: true
+    request_body: false
+    success_codes: [204]
+
+status_codes:
+  success:
+    200: "OK - Request succeeded"
+    201: "Created - Resource created successfully"
+    204: "No Content - Request succeeded, no response body"
+
+  client_errors:
+    400: "Bad Request - Invalid input"
+    401: "Unauthorized - Missing/invalid auth"
+    403: "Forbidden - Insufficient permissions"
+    404: "Not Found - Resource doesn't exist"
+    409: "Conflict - Resource already exists"
+    422: "Unprocessable Entity - Validation failed"
+    429: "Too Many Requests - Rate limit exceeded"
+
+  server_errors:
+    500: "Internal Server Error - Server-side error"
+
+error_response_format:
+  required_fields:
+    error: "Human-readable message"
+    code: "MACHINE_READABLE_ERROR_CODE"
+    details: "Additional context object"
+
+  example:
+    error: "Validation failed"
+    code: "VALIDATION_ERROR"
+    details:
+      field_name: "Specific error for this field"
+
+authentication_patterns:
+  jwt_bearer:
+    header: "Authorization: Bearer <access_token>"
+    verification_steps:
+      - "Extract token from Authorization header"
+      - "Verify JWT signature with secret key"
+      - "Check token expiration"
+      - "Extract user_id from payload"
+      - "Compare with path parameter"
+      - "Reject if mismatch (403 Forbidden)"
+
+validation_rules:
+  string_fields:
+    title:
+      min_length: 1
+      max_length: 200
+      required: true
+      trim: true
+
+    description:
+      min_length: 0
+      max_length: 1000
+      required: false
+      trim: true
+
+  numeric_fields:
+    task_id:
+      type: "integer"
+      minimum: 1
+      required: true
+
+  datetime_fields:
+    format: "ISO 8601"
+    timezone: "UTC"
+    example: "2025-12-30T10:00:00Z"
+
+business_rules_template:
+  always:
+    - "Validate user_id from JWT token"
+    - "Filter by authenticated user only"
+    - "Use soft delete (set deleted_at)"
+    - "Record timestamps in UTC"
+
+  never:
+    - "Return other users' data"
+    - "Allow unauthenticated access"
+    - "Hard delete records"
+    - "Expose internal errors to client"
+
+edge_cases_categories:
+  - "Empty/null inputs"
+  - "Boundary values (min/max)"
+  - "Invalid data types"
+  - "Resource not found"
+  - "Unauthorized access"
+  - "Network errors/timeouts"
+  - "Database errors"
+  - "Rate limit exceeded"
+
+performance_expectations:
+  response_time:
+    p50: "<100ms"
+    p95: "<200ms"
+    p99: "<500ms"
+  timeout: "5 seconds"
+  rate_limit: "100 requests/minute/user"
+
+idempotency_guide:
+  idempotent_methods: ["GET", "PUT", "DELETE"]
+  non_idempotent: ["POST", "PATCH"]
+
+  explanation:
+    GET: "Multiple identical requests return same data"
+    PUT: "Multiple identical requests produce same final state"
+    DELETE: "Deleting already-deleted resource still returns success"
+    POST: "Multiple identical requests create multiple resources"

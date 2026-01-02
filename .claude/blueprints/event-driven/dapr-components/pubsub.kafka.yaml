@@ -1,0 +1,196 @@
+# ============================================================
+# DAPR PUB/SUB COMPONENT - Kafka
+# ============================================================
+# Enables publish/subscribe messaging via Apache Kafka
+#
+# Usage:
+#   Publish:  POST http://localhost:3500/v1.0/publish/kafka-pubsub/topic-name
+#   Subscribe: Define subscription in code or declaratively
+#
+# Swap to RabbitMQ: Change type to pubsub.rabbitmq
+# ============================================================
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: {{dapr.pubsub.name}}
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: dapr-pubsub
+spec:
+  type: {{dapr.pubsub.type}}
+  version: {{dapr.pubsub.version}}
+
+  metadata:
+  # ==================== BROKER CONNECTION ====================
+  - name: brokers
+    value: "{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+
+  - name: authRequired
+    value: "{{dapr.pubsub.metadata.authRequired}}"
+
+  # ==================== CONSUMER CONFIGURATION ====================
+  - name: consumerGroup
+    value: "{{dapr.pubsub.metadata.consumerGroup}}"
+
+  # Initial offset: oldest (process all) or newest (only new)
+  - name: initialOffset
+    value: "oldest"
+
+  # How long to wait for messages (affects latency vs efficiency)
+  - name: maxWaitDurationMs
+    value: "500"
+
+  # Max messages per fetch
+  - name: maxBatchSize
+    value: "100"
+
+  # ==================== MESSAGE CONFIGURATION ====================
+  - name: maxMessageBytes
+    value: "{{dapr.pubsub.metadata.maxMessageBytes}}"
+
+  # Disable key for now (use for partitioning if needed)
+  - name: disableEntityManagement
+    value: "false"
+
+  # ==================== RELIABILITY ====================
+  # Commit offsets automatically after processing
+  - name: consumeRetryEnabled
+    value: "true"
+
+  - name: consumeRetryInterval
+    value: "100ms"
+
+  # ==================== TLS (for production) ====================
+  # - name: tls.enabled
+  #   value: "true"
+  # - name: saslUsername
+  #   secretKeyRef:
+  #     name: kafka-secrets
+  #     key: username
+  # - name: saslPassword
+  #   secretKeyRef:
+  #     name: kafka-secrets
+  #     key: password
+  # - name: saslMechanism
+  #   value: "PLAIN"  # or "SCRAM-SHA-256", "SCRAM-SHA-512"
+
+---
+# ==================== SUBSCRIPTIONS ====================
+# Declarative subscriptions (alternative to code-based)
+
+# Task Processor Subscriptions
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: task-created-subscription
+  namespace: {{app.namespace}}
+spec:
+  pubsubname: {{dapr.pubsub.name}}
+  topic: task-created
+  routes:
+    default: /events/task-created
+  scopes:
+    - task-processor
+    - analytics-aggregator
+
+---
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: task-updated-subscription
+  namespace: {{app.namespace}}
+spec:
+  pubsubname: {{dapr.pubsub.name}}
+  topic: task-updated
+  routes:
+    default: /events/task-updated
+  scopes:
+    - task-processor
+
+---
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: task-deleted-subscription
+  namespace: {{app.namespace}}
+spec:
+  pubsubname: {{dapr.pubsub.name}}
+  topic: task-deleted
+  routes:
+    default: /events/task-deleted
+  scopes:
+    - task-processor
+
+---
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: task-completed-subscription
+  namespace: {{app.namespace}}
+spec:
+  pubsubname: {{dapr.pubsub.name}}
+  topic: task-completed
+  routes:
+    default: /events/task-completed
+  scopes:
+    - notification-sender
+    - analytics-aggregator
+
+---
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: user-registered-subscription
+  namespace: {{app.namespace}}
+spec:
+  pubsubname: {{dapr.pubsub.name}}
+  topic: user-registered
+  routes:
+    default: /events/user-registered
+  scopes:
+    - notification-sender
+
+---
+# ==================== DEAD LETTER TOPIC ====================
+# For failed messages (retry exhausted)
+apiVersion: dapr.io/v2alpha1
+kind: Subscription
+metadata:
+  name: dead-letter-subscription
+  namespace: {{app.namespace}}
+spec:
+  pubsubname: {{dapr.pubsub.name}}
+  topic: dead-letter
+  routes:
+    default: /events/dead-letter
+  deadLetterTopic: ""  # No further dead-lettering
+  scopes:
+    - error-handler
+
+---
+# ==================== RABBITMQ ALTERNATIVE ====================
+# To swap Kafka for RabbitMQ, replace the component above with:
+#
+# apiVersion: dapr.io/v1alpha1
+# kind: Component
+# metadata:
+#   name: {{dapr.pubsub.name}}
+#   namespace: {{app.namespace}}
+# spec:
+#   type: pubsub.rabbitmq
+#   version: v1
+#   metadata:
+#   - name: host
+#     value: "amqp://rabbitmq.{{app.namespace}}.svc.cluster.local:5672"
+#   - name: durable
+#     value: "true"
+#   - name: deletedWhenUnused
+#     value: "false"
+#   - name: autoAck
+#     value: "false"
+#   - name: deliveryMode
+#     value: "2"  # Persistent
+#   - name: requeueInFailure
+#     value: "true"

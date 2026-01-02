@@ -1,0 +1,80 @@
+# ============================================================
+# CONFIGMAPS - Non-sensitive configuration
+# ============================================================
+# Store: API URLs, feature flags, log levels, app settings
+# NOT for: Passwords, API keys, database URLs, secrets
+# ============================================================
+
+---
+# ==================== BACKEND CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-backend-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-backend
+    tier: backend
+data:
+  # Application Settings
+  ENVIRONMENT: "{{app.environment}}"
+  LOG_LEVEL: "{{config.backend.LOG_LEVEL}}"
+
+  # CORS Configuration
+  CORS_ORIGINS: "{{config.backend.CORS_ORIGINS}}"
+
+  # Feature Flags
+  FEATURE_FLAG_NEW_UI: "{{config.backend.FEATURE_FLAG_NEW_UI}}"
+
+  # Service Discovery (internal K8s DNS)
+  FRONTEND_SERVICE_URL: "http://{{app.name}}-frontend:{{frontend.port.service}}"
+
+  # Performance Settings
+  WORKERS: "4"
+  TIMEOUT: "30"
+
+  # Monitoring (if using Prometheus)
+  METRICS_ENABLED: "true"
+  METRICS_PORT: "9090"
+
+---
+# ==================== FRONTEND CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-frontend-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-frontend
+    tier: frontend
+data:
+  # Public Environment Variables (NEXT_PUBLIC_*)
+  # These are bundled into the frontend at build time
+  NEXT_PUBLIC_APP_NAME: "{{config.frontend.NEXT_PUBLIC_APP_NAME}}"
+  NEXT_PUBLIC_API_URL: "{{config.frontend.NEXT_PUBLIC_API_URL}}"
+  NEXT_PUBLIC_ENVIRONMENT: "{{config.frontend.NEXT_PUBLIC_ENVIRONMENT}}"
+
+  # Runtime Settings
+  NODE_ENV: "production"
+
+  # Analytics (non-sensitive tracking IDs)
+  # NEXT_PUBLIC_GA_ID: "G-XXXXXXXXXX"
+
+  # Feature Flags (client-side)
+  NEXT_PUBLIC_FEATURE_NEW_DASHBOARD: "true"
+
+---
+# ==================== SHARED CONFIGMAP ====================
+# For settings used by both frontend and backend
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-shared-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+data:
+  # Shared settings
+  APP_VERSION: "1.0.0"
+  TIMEZONE: "UTC"
+  DEFAULT_LANGUAGE: "en"

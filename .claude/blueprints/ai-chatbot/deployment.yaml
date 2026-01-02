@@ -1,0 +1,236 @@
+# ============================================================
+# DEPLOYMENTS - AI Chatbot Components
+# ============================================================
+# Architecture: Stateless services + Persistent storage
+#
+# Frontend --> Backend --> MCP Server
+#                |              |
+#                v              v
+#           PostgreSQL    (External APIs)
+# ============================================================
+
+---
+# ==================== FRONTEND DEPLOYMENT ====================
+# ChatKit UI - React/Next.js chat interface
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-frontend
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-frontend
+    component: frontend
+spec:
+  replicas: {{frontend.replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-frontend
+        component: frontend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+      - name: frontend
+        image: {{frontend.image.repository}}:{{frontend.image.tag}}
+        imagePullPolicy: {{frontend.image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{frontend.port.container}}
+
+        env:
+        - name: NEXT_PUBLIC_APP_NAME
+          value: "{{frontend.env.NEXT_PUBLIC_APP_NAME}}"
+        - name: NEXT_PUBLIC_API_URL
+          value: "{{frontend.env.NEXT_PUBLIC_API_URL}}"
+        - name: NEXT_PUBLIC_WS_URL
+          value: "{{frontend.env.NEXT_PUBLIC_WS_URL}}"
+
+        resources:
+          requests:
+            cpu: {{frontend.resources.requests.cpu}}
+            memory: {{frontend.resources.requests.memory}}
+          limits:
+            cpu: {{frontend.resources.limits.cpu}}
+            memory: {{frontend.resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: {{frontend.healthCheck.path}}
+            port: {{frontend.port.container}}
+          initialDelaySeconds: {{frontend.healthCheck.initialDelaySeconds}}
+          periodSeconds: {{frontend.healthCheck.periodSeconds}}
+
+        readinessProbe:
+          httpGet:
+            path: {{frontend.healthCheck.path}}
+            port: {{frontend.port.container}}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# ==================== BACKEND DEPLOYMENT ====================
+# FastAPI + OpenAI Agents SDK
+# STATELESS: All conversation state loaded from database per request
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-backend
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-backend
+    component: backend
+  annotations:
+    # Restart on config change
+    configmap.reloader.stakater.com/reload: "{{app.name}}-backend-config"
+spec:
+  replicas: {{backend.replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-backend
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-backend
+        component: backend
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      # Wait for database to be ready
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.36
+        command: ['sh', '-c', 'until nc -z {{postgres.name}} {{postgres.port.service}}; do echo waiting for postgres; sleep 2; done;']
+
+      containers:
+      - name: backend
+        image: {{backend.image.repository}}:{{backend.image.tag}}
+        imagePullPolicy: {{backend.image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{backend.port.container}}
+
+        # Environment from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: {{app.name}}-backend-config
+
+        # Secrets
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: DATABASE_URL
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: OPENAI_API_KEY
+        - name: AUTH_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: AUTH_SECRET
+
+        resources:
+          requests:
+            cpu: {{backend.resources.requests.cpu}}
+            memory: {{backend.resources.requests.memory}}
+          limits:
+            cpu: {{backend.resources.limits.cpu}}
+            memory: {{backend.resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: {{backend.healthCheck.path}}
+            port: {{backend.port.container}}
+          initialDelaySeconds: {{backend.healthCheck.initialDelaySeconds}}
+          periodSeconds: {{backend.healthCheck.periodSeconds}}
+
+        readinessProbe:
+          httpGet:
+            path: {{backend.healthCheck.path}}
+            port: {{backend.port.container}}
+          initialDelaySeconds: 10
+          periodSeconds: 5
+
+---
+# ==================== MCP SERVER DEPLOYMENT ====================
+# Model Context Protocol server for tool execution
+# Separate deployment for independent scaling
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{app.name}}-mcp-server
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-mcp-server
+    component: mcp-server
+spec:
+  replicas: {{mcpServer.replicas}}
+  selector:
+    matchLabels:
+      app: {{app.name}}-mcp-server
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-mcp-server
+        component: mcp-server
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+
+      containers:
+      - name: mcp-server
+        image: {{mcpServer.image.repository}}:{{mcpServer.image.tag}}
+        imagePullPolicy: {{mcpServer.image.pullPolicy}}
+
+        ports:
+        - name: http
+          containerPort: {{mcpServer.port.container}}
+
+        # Environment from ConfigMap
+        envFrom:
+        - configMapRef:
+            name: {{app.name}}-mcp-config
+
+        # Secrets (database for tool operations)
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: DATABASE_URL
+
+        resources:
+          requests:
+            cpu: {{mcpServer.resources.requests.cpu}}
+            memory: {{mcpServer.resources.requests.memory}}
+          limits:
+            cpu: {{mcpServer.resources.limits.cpu}}
+            memory: {{mcpServer.resources.limits.memory}}
+
+        livenessProbe:
+          httpGet:
+            path: {{mcpServer.healthCheck.path}}
+            port: {{mcpServer.port.container}}
+          initialDelaySeconds: {{mcpServer.healthCheck.initialDelaySeconds}}
+          periodSeconds: {{mcpServer.healthCheck.periodSeconds}}
+
+        readinessProbe:
+          httpGet:
+            path: {{mcpServer.healthCheck.path}}
+            port: {{mcpServer.port.container}}
+          initialDelaySeconds: 10
+          periodSeconds: 5

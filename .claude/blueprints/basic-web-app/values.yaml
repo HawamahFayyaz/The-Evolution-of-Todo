@@ -1,0 +1,170 @@
+# ============================================================
+# BASIC WEB APP BLUEPRINT - CONFIGURATION VALUES
+# ============================================================
+# Copy this file and customize for your specific application.
+# All values below are referenced in the other YAML files.
+# ============================================================
+
+# Application Identity
+app:
+  name: "my-web-app"           # Used in all resource names
+  namespace: "default"          # K8s namespace to deploy into
+  environment: "development"    # development | staging | production
+
+# ============================================================
+# BACKEND CONFIGURATION
+# ============================================================
+backend:
+  enabled: true
+  name: "backend"
+
+  # Container Image
+  image:
+    repository: "ghcr.io/yourorg/your-backend"
+    tag: "latest"
+    pullPolicy: "IfNotPresent"  # Always for prod, IfNotPresent for dev
+
+  # Replicas (overridden by HPA when enabled)
+  replicas: 2
+
+  # Port Configuration
+  port:
+    container: 8000             # Port your app listens on
+    service: 8000               # Port exposed by Service
+
+  # Resource Limits (ALWAYS SET IN PRODUCTION)
+  resources:
+    requests:
+      cpu: "100m"               # 0.1 CPU core guaranteed
+      memory: "128Mi"           # 128 MB RAM guaranteed
+    limits:
+      cpu: "500m"               # 0.5 CPU core maximum
+      memory: "512Mi"           # 512 MB RAM maximum
+
+  # Health Probes
+  healthCheck:
+    path: "/health"             # Your health endpoint
+    initialDelaySeconds: 30     # Wait before first check
+    periodSeconds: 10           # Check interval
+    timeoutSeconds: 5           # Probe timeout
+    failureThreshold: 3         # Failures before restart
+
+# ============================================================
+# FRONTEND CONFIGURATION
+# ============================================================
+frontend:
+  enabled: true
+  name: "frontend"
+
+  # Container Image
+  image:
+    repository: "ghcr.io/yourorg/your-frontend"
+    tag: "latest"
+    pullPolicy: "IfNotPresent"
+
+  # Replicas
+  replicas: 2
+
+  # Port Configuration
+  port:
+    container: 3000             # Next.js default
+    service: 80                 # Exposed port
+
+  # Resource Limits
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # Health Probes
+  healthCheck:
+    path: "/api/health"         # Next.js API health route
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+# ============================================================
+# AUTOSCALING (HPA)
+# ============================================================
+autoscaling:
+  enabled: true                 # Set false for dev/minikube
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPU: 70                 # Scale up when CPU > 70%
+  targetMemory: 80              # Scale up when Memory > 80%
+
+# ============================================================
+# INGRESS CONFIGURATION
+# ============================================================
+ingress:
+  enabled: true
+  className: "nginx"            # nginx | traefik | alb
+
+  # Domain Configuration
+  host: "myapp.example.com"     # Your domain
+
+  # TLS/SSL
+  tls:
+    enabled: true
+    secretName: "app-tls-secret"
+    # For cert-manager auto-provisioning:
+    clusterIssuer: "letsencrypt-prod"  # or letsencrypt-staging
+
+  # Path Routing
+  paths:
+    frontend: "/"               # Root goes to frontend
+    backend: "/api"             # /api/* goes to backend
+
+# ============================================================
+# CONFIGMAP (Non-Sensitive)
+# ============================================================
+config:
+  # Backend Environment
+  backend:
+    ENVIRONMENT: "production"
+    LOG_LEVEL: "info"
+    CORS_ORIGINS: "https://myapp.example.com"
+    FEATURE_FLAG_NEW_UI: "true"
+
+  # Frontend Environment
+  frontend:
+    NEXT_PUBLIC_APP_NAME: "My Web App"
+    NEXT_PUBLIC_API_URL: "https://myapp.example.com/api"
+    NEXT_PUBLIC_ENVIRONMENT: "production"
+
+# ============================================================
+# SECRETS (Sensitive - Base64 encode in real deployment)
+# ============================================================
+# WARNING: In production, use:
+# - Kubernetes Secrets with SOPS encryption
+# - External Secrets Operator
+# - HashiCorp Vault
+# - Cloud provider secret managers
+secrets:
+  DATABASE_URL: "postgresql://user:password@postgres:5432/mydb"
+  AUTH_SECRET: "your-32-char-secret-key-here-123"
+  API_KEY: "sk-your-api-key-here"
+
+# ============================================================
+# SERVICE CONFIGURATION
+# ============================================================
+service:
+  backend:
+    type: "ClusterIP"           # Internal only
+  frontend:
+    type: "LoadBalancer"        # External access
+    # For Minikube, use NodePort instead:
+    # type: "NodePort"
+    # nodePort: 30080
+
+# ============================================================
+# LABELS (Applied to all resources)
+# ============================================================
+labels:
+  common:
+    "app.kubernetes.io/managed-by": "kubectl"
+    "app.kubernetes.io/part-of": "my-web-app"

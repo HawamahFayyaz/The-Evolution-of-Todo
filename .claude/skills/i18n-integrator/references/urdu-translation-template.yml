@@ -1,0 +1,50 @@
+# Urdu Translation Reference
+
+urdu_fonts:
+  recommended:
+    - "Noto Nastaliq Urdu (Google Fonts)"
+    - "Jameel Noori Nastaleeq"
+
+  import: |
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Nastaliq+Urdu&display=swap');
+
+rtl_configuration:
+  html_attribute: 'dir="rtl"'
+  css_property: 'direction: rtl'
+  text_align: 'text-align: right'
+
+common_translations:
+  ui_elements:
+    button: "بٹن"
+    input: "ان پٹ"
+    select: "منتخب کریں"
+    checkbox: "چیک باکس"
+    radio: "ریڈیو بٹن"
+    submit: "جمع کرائیں"
+    cancel: "منسوخ کریں"
+    save: "محفوظ کریں"
+    delete: "حذف کریں"
+    edit: "ترمیم کریں"
+    add: "شامل کریں"
+    remove: "ہٹائیں"
+    close: "بند کریں"
+    open: "کھولیں"
+    search: "تلاش کریں"
+
+  status:
+    success: "کامیابی"
+    error: "خرابی"
+    warning: "انتباہ"
+    info: "معلومات"
+    loading: "لوڈ ہو رہا ہے"
+    pending: "زیر التواء"
+    completed: "مکمل"
+    active: "فعال"
+    inactive: "غیر فعال"
+
+pluralization:
+  next_intl_support: true
+  example: |
+    {
+      "items": "{count, plural, =0 {کوئی آئٹم نہیں} one {# آئٹم} other {# آئٹمز}}"
+    }

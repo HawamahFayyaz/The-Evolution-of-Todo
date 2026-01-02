@@ -1,0 +1,151 @@
+# ============================================================
+# HORIZONTAL POD AUTOSCALER - Automatic scaling
+# ============================================================
+# Scales pods based on CPU/Memory utilization
+# Min: 2 replicas (high availability)
+# Max: 10 replicas (cost control)
+# Target: 70% CPU utilization
+# ============================================================
+
+---
+# ==================== BACKEND HPA ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{app.name}}-backend-hpa
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{app.name}}-backend
+
+  # Replica Bounds
+  minReplicas: {{autoscaling.minReplicas}}
+  maxReplicas: {{autoscaling.maxReplicas}}
+
+  # Scaling Metrics
+  metrics:
+  # CPU-based scaling
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.targetCPU}}
+
+  # Memory-based scaling
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.targetMemory}}
+
+  # Scaling Behavior (optional, fine-tuning)
+  behavior:
+    # Scale up quickly when needed
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100          # Double pods in one step
+        periodSeconds: 60
+      - type: Pods
+        value: 4            # Or add 4 pods max
+        periodSeconds: 60
+      selectPolicy: Max
+
+    # Scale down slowly (avoid flapping)
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 5 min cooldown
+      policies:
+      - type: Percent
+        value: 25           # Remove 25% of pods
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# ==================== FRONTEND HPA ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{app.name}}-frontend-hpa
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{app.name}}-frontend
+
+  minReplicas: {{autoscaling.minReplicas}}
+  maxReplicas: {{autoscaling.maxReplicas}}
+
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.targetCPU}}
+
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.targetMemory}}
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+
+---
+# ==================== CUSTOM METRICS HPA (Advanced) ====================
+# Scale based on application-specific metrics (requires Prometheus adapter)
+# apiVersion: autoscaling/v2
+# kind: HorizontalPodAutoscaler
+# metadata:
+#   name: {{app.name}}-backend-custom-hpa
+#   namespace: {{app.namespace}}
+# spec:
+#   scaleTargetRef:
+#     apiVersion: apps/v1
+#     kind: Deployment
+#     name: {{app.name}}-backend
+#   minReplicas: 2
+#   maxReplicas: 20
+#   metrics:
+#   # Scale based on requests per second
+#   - type: Pods
+#     pods:
+#       metric:
+#         name: http_requests_per_second
+#       target:
+#         type: AverageValue
+#         averageValue: "100"  # 100 req/s per pod
+#   # Scale based on queue length
+#   - type: External
+#     external:
+#       metric:
+#         name: kafka_consumer_lag
+#         selector:
+#           matchLabels:
+#             topic: "task-events"
+#       target:
+#         type: Value
+#         value: "1000"  # Scale when lag > 1000

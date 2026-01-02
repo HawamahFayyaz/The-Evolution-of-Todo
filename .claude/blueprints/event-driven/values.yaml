@@ -1,0 +1,307 @@
+# ============================================================
+# EVENT-DRIVEN ARCHITECTURE - Master Configuration
+# ============================================================
+# Kafka + Dapr event-driven microservices deployment
+# Pattern: Loose coupling via pub/sub, events as source of truth
+# ============================================================
+
+# ==================== APPLICATION ====================
+app:
+  name: "myapp"
+  namespace: "event-driven"
+  environment: "production"  # development | staging | production
+
+# ==================== PRODUCER SERVICE ====================
+# Publishes events to Kafka topics
+producer:
+  name: "producer"
+  replicas: 2
+  image:
+    repository: "your-registry/producer-service"
+    tag: "latest"
+    pullPolicy: "IfNotPresent"
+
+  port:
+    container: 8080
+    service: 80
+
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+
+  # Dapr sidecar configuration
+  dapr:
+    enabled: true
+    appId: "producer-service"
+    appPort: 8080
+    logLevel: "info"
+    # Enable pub/sub
+    pubsubName: "kafka-pubsub"
+
+  env:
+    LOG_LEVEL: "info"
+
+# ==================== CONSUMER SERVICES ====================
+# Subscribe to Kafka topics and process events
+consumers:
+  # Task processor consumer
+  - name: "task-processor"
+    replicas: 3
+    image:
+      repository: "your-registry/task-processor"
+      tag: "latest"
+      pullPolicy: "IfNotPresent"
+
+    port:
+      container: 8080
+      service: 80
+
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+
+    dapr:
+      enabled: true
+      appId: "task-processor"
+      appPort: 8080
+      logLevel: "info"
+      pubsubName: "kafka-pubsub"
+      stateStore: "postgresql-state"
+
+    # Topics this consumer subscribes to
+    subscriptions:
+      - topic: "task-created"
+        route: "/events/task-created"
+      - topic: "task-updated"
+        route: "/events/task-updated"
+      - topic: "task-deleted"
+        route: "/events/task-deleted"
+
+    env:
+      LOG_LEVEL: "info"
+      ENABLE_IDEMPOTENCY: "true"
+
+  # Notification consumer
+  - name: "notification-sender"
+    replicas: 2
+    image:
+      repository: "your-registry/notification-sender"
+      tag: "latest"
+      pullPolicy: "IfNotPresent"
+
+    port:
+      container: 8080
+      service: 80
+
+    resources:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+
+    dapr:
+      enabled: true
+      appId: "notification-sender"
+      appPort: 8080
+      logLevel: "info"
+      pubsubName: "kafka-pubsub"
+
+    subscriptions:
+      - topic: "task-completed"
+        route: "/events/task-completed"
+      - topic: "user-registered"
+        route: "/events/user-registered"
+
+    env:
+      LOG_LEVEL: "info"
+      SMTP_HOST: "smtp.example.com"
+
+  # Analytics consumer
+  - name: "analytics-aggregator"
+    replicas: 2
+    image:
+      repository: "your-registry/analytics-aggregator"
+      tag: "latest"
+      pullPolicy: "IfNotPresent"
+
+    port:
+      container: 8080
+      service: 80
+
+    resources:
+      requests:
+        cpu: "200m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+
+    dapr:
+      enabled: true
+      appId: "analytics-aggregator"
+      appPort: 8080
+      logLevel: "info"
+      pubsubName: "kafka-pubsub"
+      stateStore: "postgresql-state"
+
+    subscriptions:
+      - topic: "task-created"
+        route: "/events/task-created"
+      - topic: "task-completed"
+        route: "/events/task-completed"
+
+    env:
+      LOG_LEVEL: "info"
+      AGGREGATION_WINDOW_SECONDS: "60"
+
+# ==================== KAFKA ====================
+kafka:
+  # Use built-in StatefulSet or Strimzi operator
+  useStrimzi: false  # Set to true for production
+
+  replicas: 3
+  image:
+    repository: "bitnami/kafka"
+    tag: "3.6"
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "4Gi"
+
+  storage:
+    size: "50Gi"
+    storageClassName: "standard"
+
+  # Kafka configuration
+  config:
+    numPartitions: 6
+    replicationFactor: 3
+    minInsyncReplicas: 2
+    logRetentionHours: 168  # 7 days
+    autoCreateTopics: false
+
+  # Pre-defined topics
+  topics:
+    - name: "task-created"
+      partitions: 6
+      replicationFactor: 3
+    - name: "task-updated"
+      partitions: 6
+      replicationFactor: 3
+    - name: "task-deleted"
+      partitions: 3
+      replicationFactor: 3
+    - name: "task-completed"
+      partitions: 6
+      replicationFactor: 3
+    - name: "user-registered"
+      partitions: 3
+      replicationFactor: 3
+    - name: "analytics-events"
+      partitions: 12
+      replicationFactor: 3
+
+  # Zookeeper (for Kafka < 3.0 or if using Zookeeper mode)
+  zookeeper:
+    enabled: true
+    replicas: 3
+    storage:
+      size: "10Gi"
+
+# ==================== POSTGRESQL (State Store) ====================
+postgresql:
+  enabled: true
+  image:
+    repository: "postgres"
+    tag: "15-alpine"
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+  storage:
+    size: "20Gi"
+    storageClassName: "standard"
+
+  database: "eventstate"
+  username: "dapruser"
+
+# ==================== DAPR COMPONENTS ====================
+dapr:
+  # Pub/Sub component
+  pubsub:
+    name: "kafka-pubsub"
+    type: "pubsub.kafka"
+    version: "v1"
+    metadata:
+      brokers: "kafka-headless:9092"
+      authRequired: false
+      consumerGroup: "dapr-consumers"
+      maxMessageBytes: 1048576  # 1MB
+
+  # State store component
+  stateStore:
+    name: "postgresql-state"
+    type: "state.postgresql"
+    version: "v1"
+    metadata:
+      connectionString: "host=postgresql port=5432 user=dapruser password=PLACEHOLDER dbname=eventstate sslmode=disable"
+      tableName: "dapr_state"
+
+  # Scheduled jobs
+  jobs:
+    enabled: true
+    schedule: "0 * * * *"  # Every hour
+
+# ==================== MONITORING ====================
+monitoring:
+  enabled: true
+
+  prometheus:
+    scrapeInterval: "15s"
+
+  grafana:
+    enabled: true
+    dashboards:
+      - kafka-overview
+      - consumer-lag
+      - event-throughput
+      - dapr-metrics
+
+# ==================== AUTOSCALING ====================
+autoscaling:
+  producer:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+
+  consumers:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 20
+    targetCPU: 70
+    # KEDA scaling based on Kafka lag
+    keda:
+      enabled: true
+      lagThreshold: 100
+      activationLagThreshold: 10

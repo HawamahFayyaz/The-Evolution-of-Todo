@@ -1,0 +1,261 @@
+# ============================================================
+# SERVICES - Event-Driven Architecture
+# ============================================================
+# Services for Kafka, PostgreSQL, Producer, and Consumers
+# Headless services for StatefulSets
+# ============================================================
+
+---
+# ==================== KAFKA HEADLESS SERVICE ====================
+# For StatefulSet DNS resolution
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-kafka-headless
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-kafka
+    component: kafka
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+
+  ports:
+  - name: kafka
+    port: 9092
+    targetPort: kafka
+  - name: kafka-internal
+    port: 9093
+    targetPort: kafka-internal
+
+  selector:
+    app: {{app.name}}-kafka
+
+---
+# ==================== KAFKA CLIENT SERVICE ====================
+# For clients to connect to Kafka cluster
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-kafka
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-kafka
+    component: kafka
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: kafka
+    port: 9092
+    targetPort: kafka
+
+  selector:
+    app: {{app.name}}-kafka
+
+---
+# ==================== ZOOKEEPER HEADLESS SERVICE ====================
+# {{#if kafka.zookeeper.enabled}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-zookeeper-headless
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-zookeeper
+    component: zookeeper
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+
+  ports:
+  - name: client
+    port: 2181
+    targetPort: client
+  - name: follower
+    port: 2888
+    targetPort: follower
+  - name: election
+    port: 3888
+    targetPort: election
+
+  selector:
+    app: {{app.name}}-zookeeper
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-zookeeper
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-zookeeper
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: client
+    port: 2181
+    targetPort: client
+
+  selector:
+    app: {{app.name}}-zookeeper
+# {{/if}}
+
+---
+# ==================== POSTGRESQL HEADLESS SERVICE ====================
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-postgresql-headless
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-postgresql
+    component: state-store
+spec:
+  type: ClusterIP
+  clusterIP: None
+  publishNotReadyAddresses: true
+
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: postgresql
+
+  selector:
+    app: {{app.name}}-postgresql
+
+---
+# ==================== POSTGRESQL CLIENT SERVICE ====================
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-postgresql
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-postgresql
+    component: state-store
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: postgresql
+    port: 5432
+    targetPort: postgresql
+
+  selector:
+    app: {{app.name}}-postgresql
+
+---
+# ==================== PRODUCER SERVICE ====================
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-producer
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-producer
+    component: producer
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: http
+    port: {{producer.port.service}}
+    targetPort: http
+  - name: dapr-http
+    port: 3500
+    targetPort: 3500
+  - name: dapr-grpc
+    port: 50001
+    targetPort: 50001
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+
+  selector:
+    app: {{app.name}}-producer
+
+---
+# ==================== CONSUMER SERVICES ====================
+# Task Processor
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-task-processor
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-task-processor
+    component: consumer
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: http
+    port: {{consumers[0].port.service}}
+    targetPort: http
+  - name: dapr-http
+    port: 3500
+    targetPort: 3500
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+
+  selector:
+    app: {{app.name}}-task-processor
+
+---
+# Notification Sender
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-notification-sender
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-notification-sender
+    component: consumer
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: http
+    port: {{consumers[1].port.service}}
+    targetPort: http
+  - name: dapr-http
+    port: 3500
+    targetPort: 3500
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+
+  selector:
+    app: {{app.name}}-notification-sender
+
+---
+# Analytics Aggregator
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-analytics-aggregator
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-analytics-aggregator
+    component: consumer
+spec:
+  type: ClusterIP
+
+  ports:
+  - name: http
+    port: {{consumers[2].port.service}}
+    targetPort: http
+  - name: dapr-http
+    port: 3500
+    targetPort: 3500
+  - name: metrics
+    port: 9090
+    targetPort: 9090
+
+  selector:
+    app: {{app.name}}-analytics-aggregator

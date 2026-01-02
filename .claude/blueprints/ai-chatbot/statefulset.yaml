@@ -1,0 +1,197 @@
+# ============================================================
+# STATEFULSET - PostgreSQL for Chat History Persistence
+# ============================================================
+# Why StatefulSet instead of Deployment:
+# - Stable network identity (chatbot-postgres-0)
+# - Stable storage (PVC not deleted on pod restart)
+# - Ordered startup/shutdown
+#
+# For production, consider managed databases:
+# - Neon (serverless PostgreSQL)
+# - AWS RDS / Aurora
+# - GCP Cloud SQL
+# - Azure Database for PostgreSQL
+# ============================================================
+
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{postgres.name}}
+  namespace: {{app.namespace}}
+  labels:
+    app: {{postgres.name}}
+    component: database
+spec:
+  serviceName: {{postgres.name}}
+  replicas: {{postgres.replicas}}
+  selector:
+    matchLabels:
+      app: {{postgres.name}}
+
+  template:
+    metadata:
+      labels:
+        app: {{postgres.name}}
+        component: database
+    spec:
+      containers:
+      - name: postgres
+        image: {{postgres.image.repository}}:{{postgres.image.tag}}
+
+        ports:
+        - name: postgres
+          containerPort: {{postgres.port.container}}
+
+        env:
+        - name: POSTGRES_DB
+          value: "{{postgres.database.name}}"
+        - name: POSTGRES_USER
+          value: "{{postgres.database.user}}"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: "/var/lib/postgresql/data/pgdata"
+
+        resources:
+          requests:
+            cpu: {{postgres.resources.requests.cpu}}
+            memory: {{postgres.resources.requests.memory}}
+          limits:
+            cpu: {{postgres.resources.limits.cpu}}
+            memory: {{postgres.resources.limits.memory}}
+
+        # Health checks
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - {{postgres.database.user}}
+            - -d
+            - {{postgres.database.name}}
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - {{postgres.database.user}}
+            - -d
+            - {{postgres.database.name}}
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+
+        # Volume mounts
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: {{app.name}}-postgres-init
+
+  # Persistent Volume Claim Template
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: {{postgres.storage.storageClassName}}
+      resources:
+        requests:
+          storage: {{postgres.storage.size}}
+
+---
+# ==================== POSTGRES INIT SCRIPTS ====================
+# Creates tables for chat history on first startup
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-postgres-init
+  namespace: {{app.namespace}}
+data:
+  01-init-schema.sql: |
+    -- ============================================================
+    -- CHAT HISTORY SCHEMA
+    -- ============================================================
+
+    -- Conversations table
+    CREATE TABLE IF NOT EXISTS conversations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        user_id VARCHAR(255) NOT NULL,
+        title VARCHAR(500),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        deleted_at TIMESTAMP WITH TIME ZONE
+    );
+
+    -- Messages table (chat history)
+    CREATE TABLE IF NOT EXISTS messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        conversation_id UUID NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+        role VARCHAR(50) NOT NULL,  -- 'user', 'assistant', 'system', 'tool'
+        content TEXT NOT NULL,
+        tool_calls JSONB,           -- For assistant tool calls
+        tool_call_id VARCHAR(255),  -- For tool responses
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    -- Tasks table (for todo app MCP tools)
+    CREATE TABLE IF NOT EXISTS tasks (
+        id SERIAL PRIMARY KEY,
+        user_id VARCHAR(255) NOT NULL,
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        completed BOOLEAN DEFAULT FALSE,
+        completed_at TIMESTAMP WITH TIME ZONE,
+        due_date TIMESTAMP WITH TIME ZONE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        deleted_at TIMESTAMP WITH TIME ZONE
+    );
+
+    -- Indexes for performance
+    CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+    CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+    CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+    CREATE INDEX IF NOT EXISTS idx_tasks_user_id ON tasks(user_id);
+    CREATE INDEX IF NOT EXISTS idx_tasks_completed ON tasks(completed);
+
+    -- Function to update updated_at timestamp
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+    END;
+    $$ language 'plpgsql';
+
+    -- Triggers for updated_at
+    DROP TRIGGER IF EXISTS update_conversations_updated_at ON conversations;
+    CREATE TRIGGER update_conversations_updated_at
+        BEFORE UPDATE ON conversations
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+
+    DROP TRIGGER IF EXISTS update_tasks_updated_at ON tasks;
+    CREATE TRIGGER update_tasks_updated_at
+        BEFORE UPDATE ON tasks
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+
+    -- Grant permissions
+    GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO {{postgres.database.user}};
+    GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO {{postgres.database.user}};

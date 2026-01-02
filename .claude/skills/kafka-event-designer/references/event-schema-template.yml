@@ -1,0 +1,42 @@
+# Event Schema Template
+
+event_type: "domain.action"  # e.g., task.created, user.logged_in
+version: "1.0"
+description: "Clear description of when this event is published"
+topic: "topic-name"  # Kafka topic
+
+schema:
+  event_id: string (uuid, required)
+  event_type: string (required)
+  event_version: string (required)
+  timestamp: string (ISO 8601, required)
+  source: string (service name, required)
+  data:
+    # Event-specific fields
+    field_name: type (description)
+  metadata:
+    correlation_id: string (optional)
+    causation_id: string (optional)
+
+example:
+  event_id: "550e8400-e29b-41d4-a716-446655440000"
+  event_type: "task.created"
+  event_version: "1.0"
+  timestamp: "2025-12-30T10:00:00Z"
+  source: "todo-backend"
+  data:
+    task_id: 123
+    user_id: "user_abc"
+    title: "Example task"
+  metadata:
+    correlation_id: "req_xyz"
+
+consumers:
+  - service-name (what it does with this event)
+
+partition_key: "user_id"  # For ordering events per user
+
+notes:
+  - "Events are immutable - never modify published events"
+  - "Use past tense (created, not create)"
+  - "Include enough data for consumers to act without querying"

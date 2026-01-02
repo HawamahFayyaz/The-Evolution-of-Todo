@@ -1,0 +1,98 @@
+# Docker Best Practices Reference
+
+multi_stage_builds:
+  purpose: "Separate build dependencies from runtime, reduce final image size"
+  pattern: |
+    FROM builder-image AS builder
+    # Install build tools, compile
+
+    FROM runtime-image
+    # Copy only artifacts from builder
+
+  example_python:
+    code: |
+      FROM python:3.13-slim AS builder
+      WORKDIR /app
+      COPY requirements.txt .
+      RUN pip install --user -r requirements.txt
+
+      FROM python:3.13-slim
+      WORKDIR /app
+      COPY --from=builder /root/.local /root/.local
+      COPY . .
+      CMD ["python", "app.py"]
+
+base_images:
+  python:
+    full: "python:3.13 (1GB)"
+    slim: "python:3.13-slim (150MB) - Recommended"
+    alpine: "python:3.13-alpine (50MB, but compatibility issues)"
+
+  node:
+    full: "node:20 (1GB)"
+    alpine: "node:20-alpine (150MB) - Recommended"
+
+non_root_user:
+  why: "Security - limit damage if container is compromised"
+  python_pattern: |
+    RUN groupadd -r appuser && useradd -r -g appuser appuser
+    USER appuser
+
+  node_pattern: |
+    RUN addgroup --system --gid 1001 nodejs && \
+        adduser --system --uid 1001 nextjs
+    USER nextjs
+
+layer_optimization:
+  principle: "Order commands by change frequency (least to most)"
+  order:
+    1: "Base image (FROM)"
+    2: "System dependencies (apt-get)"
+    3: "Package manager files (package.json, requirements.txt)"
+    4: "Install dependencies (npm ci, pip install)"
+    5: "Application code (COPY . .)"
+
+  example: |
+    FROM node:20-alpine
+    WORKDIR /app
+    COPY package*.json ./    # Copy package files first
+    RUN npm ci               # Install deps (cached if package.json unchanged)
+    COPY . .                 # Copy source last (changes frequently)
+    RUN npm run build
+
+health_checks:
+  http_check: |
+    HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+        CMD curl -f http://localhost:8000/health || exit 1
+
+  script_check: |
+    HEALTHCHECK CMD python -c "import requests; requests.get('http://localhost:8000/health')" || exit 1
+
+dockerignore:
+  purpose: "Exclude files from build context (faster builds, smaller images)"
+  common_patterns:
+    - "node_modules/"
+    - "__pycache__/"
+    - ".git/"
+    - "*.log"
+    - ".env"
+    - "README.md"
+    - ".vscode/"
+
+environment_variables:
+  build_time: "ARG (only available during build)"
+  runtime: "ENV (available in running container)"
+
+  example: |
+    ARG BUILD_VERSION
+    ENV APP_VERSION=$BUILD_VERSION
+    ENV NODE_ENV=production
+
+security:
+  best_practices:
+    - "Don't run as root"
+    - "Don't copy secrets into image"
+    - "Use .dockerignore"
+    - "Scan images for vulnerabilities"
+    - "Use specific versions (not :latest)"
+    - "Minimize installed packages"

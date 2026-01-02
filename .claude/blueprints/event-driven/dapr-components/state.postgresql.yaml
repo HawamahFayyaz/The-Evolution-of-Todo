@@ -1,0 +1,127 @@
+# ============================================================
+# DAPR STATE STORE COMPONENT - PostgreSQL
+# ============================================================
+# Provides key-value state storage for Dapr applications
+# Used by consumers for:
+#   - Idempotency tracking (processed event IDs)
+#   - Aggregation state (running totals, counts)
+#   - Saga/workflow state
+#
+# Usage:
+#   Save:   POST http://localhost:3500/v1.0/state/postgresql-state
+#   Get:    GET  http://localhost:3500/v1.0/state/postgresql-state/key
+#   Delete: DELETE http://localhost:3500/v1.0/state/postgresql-state/key
+# ============================================================
+
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: {{dapr.stateStore.name}}
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: dapr-state
+spec:
+  type: {{dapr.stateStore.type}}
+  version: {{dapr.stateStore.version}}
+
+  metadata:
+  # ==================== CONNECTION ====================
+  - name: connectionString
+    secretKeyRef:
+      name: {{app.name}}-secrets
+      key: DAPR_STATE_CONNECTION_STRING
+
+  # ==================== TABLE CONFIGURATION ====================
+  - name: tableName
+    value: "{{dapr.stateStore.metadata.tableName}}"
+
+  # Metadata table for actor reminders (if using actors)
+  - name: metadataTableName
+    value: "dapr_metadata"
+
+  # ==================== BEHAVIOR ====================
+  # Key prefix to namespace state per app
+  - name: keyPrefix
+    value: "name"  # Options: name (app-id prefix), none, custom value
+
+  # Clean up expired state entries
+  - name: cleanupIntervalInSeconds
+    value: "3600"
+
+  # ==================== TRANSACTIONS ====================
+  # Enable transaction support
+  - name: actorStateStore
+    value: "true"
+
+  # ==================== QUERY SUPPORT ====================
+  # Enable query API for complex queries
+  - name: queryIndexes
+    value: |
+      [
+        {"keys": ["status"], "name": "status_idx"},
+        {"keys": ["event_type"], "name": "event_type_idx"},
+        {"keys": ["timestamp"], "name": "timestamp_idx"}
+      ]
+
+---
+# ==================== SCOPES ====================
+# Limit which apps can access this state store
+# (Applied via spec.scopes in the component)
+#
+# To restrict access, add to spec:
+# scopes:
+#   - task-processor
+#   - analytics-aggregator
+
+---
+# ==================== REDIS ALTERNATIVE ====================
+# For high-throughput, low-latency state storage
+#
+# apiVersion: dapr.io/v1alpha1
+# kind: Component
+# metadata:
+#   name: redis-state
+#   namespace: {{app.namespace}}
+# spec:
+#   type: state.redis
+#   version: v1
+#   metadata:
+#   - name: redisHost
+#     value: "redis.{{app.namespace}}.svc.cluster.local:6379"
+#   - name: redisPassword
+#     secretKeyRef:
+#       name: {{app.name}}-secrets
+#       key: REDIS_PASSWORD
+#   - name: actorStateStore
+#     value: "true"
+#   - name: ttlInSeconds
+#     value: "86400"  # 24 hours default TTL
+
+---
+# ==================== MONGODB ALTERNATIVE ====================
+# For document-style state with flexible schemas
+#
+# apiVersion: dapr.io/v1alpha1
+# kind: Component
+# metadata:
+#   name: mongodb-state
+#   namespace: {{app.namespace}}
+# spec:
+#   type: state.mongodb
+#   version: v1
+#   metadata:
+#   - name: server
+#     value: "mongodb.{{app.namespace}}.svc.cluster.local:27017"
+#   - name: databaseName
+#     value: "daprstate"
+#   - name: collectionName
+#     value: "state"
+#   - name: username
+#     secretKeyRef:
+#       name: {{app.name}}-secrets
+#       key: MONGODB_USERNAME
+#   - name: password
+#     secretKeyRef:
+#       name: {{app.name}}-secrets
+#       key: MONGODB_PASSWORD

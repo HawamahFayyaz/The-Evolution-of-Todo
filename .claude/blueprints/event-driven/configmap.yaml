@@ -1,0 +1,255 @@
+# ============================================================
+# CONFIGMAPS - Event-Driven Architecture
+# ============================================================
+# Non-sensitive configuration for producers and consumers
+# ============================================================
+
+---
+# ==================== PRODUCER CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-producer-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-producer
+    component: producer
+data:
+  # Application Settings
+  ENVIRONMENT: "{{app.environment}}"
+  LOG_LEVEL: "{{producer.env.LOG_LEVEL}}"
+
+  # Dapr Settings
+  DAPR_HTTP_PORT: "3500"
+  DAPR_GRPC_PORT: "50001"
+  DAPR_PUBSUB_NAME: "{{producer.dapr.pubsubName}}"
+
+  # Event Publishing Settings
+  PUBLISH_TIMEOUT_SECONDS: "30"
+  PUBLISH_RETRY_COUNT: "3"
+  PUBLISH_RETRY_DELAY_MS: "1000"
+
+  # Event Schema Settings
+  EVENT_SCHEMA_VALIDATION: "true"
+  EVENT_INCLUDE_METADATA: "true"
+
+  # Topics Configuration
+  TOPICS_CONFIG: |
+    {
+      "task-created": {
+        "partitionKey": "user_id",
+        "requiresAck": true
+      },
+      "task-updated": {
+        "partitionKey": "task_id",
+        "requiresAck": true
+      },
+      "task-deleted": {
+        "partitionKey": "task_id",
+        "requiresAck": true
+      },
+      "task-completed": {
+        "partitionKey": "user_id",
+        "requiresAck": true
+      }
+    }
+
+---
+# ==================== CONSUMER CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-consumer-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: consumer
+data:
+  # Application Settings
+  ENVIRONMENT: "{{app.environment}}"
+  LOG_LEVEL: "info"
+
+  # Dapr Settings
+  DAPR_HTTP_PORT: "3500"
+  DAPR_GRPC_PORT: "50001"
+  DAPR_PUBSUB_NAME: "{{dapr.pubsub.name}}"
+  DAPR_STATE_STORE: "{{dapr.stateStore.name}}"
+
+  # Event Processing Settings
+  PROCESSING_TIMEOUT_SECONDS: "60"
+  MAX_CONCURRENT_HANDLERS: "10"
+
+  # Idempotency Settings
+  ENABLE_IDEMPOTENCY: "true"
+  IDEMPOTENCY_KEY_FIELD: "event_id"
+  IDEMPOTENCY_TTL_HOURS: "24"
+
+  # Retry Settings
+  RETRY_MAX_ATTEMPTS: "3"
+  RETRY_INITIAL_DELAY_MS: "1000"
+  RETRY_MAX_DELAY_MS: "30000"
+  RETRY_MULTIPLIER: "2"
+
+  # Dead Letter Settings
+  DEAD_LETTER_TOPIC: "dead-letter"
+  DEAD_LETTER_ENABLED: "true"
+
+---
+# ==================== KAFKA TOPICS CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-kafka-topics
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-kafka
+    component: kafka
+data:
+  # Topic creation script (run as init container or Job)
+  create-topics.sh: |
+    #!/bin/bash
+    set -e
+
+    KAFKA_BOOTSTRAP="${KAFKA_BOOTSTRAP:-{{app.name}}-kafka:9092}"
+
+    echo "Creating Kafka topics..."
+
+    # Task events
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic task-created --partitions 6 --replication-factor 3
+
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic task-updated --partitions 6 --replication-factor 3
+
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic task-deleted --partitions 3 --replication-factor 3
+
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic task-completed --partitions 6 --replication-factor 3
+
+    # User events
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic user-registered --partitions 3 --replication-factor 3
+
+    # Analytics
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic analytics-events --partitions 12 --replication-factor 3
+
+    # Dead letter
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --create --if-not-exists \
+      --topic dead-letter --partitions 3 --replication-factor 3
+
+    echo "Topics created successfully!"
+    kafka-topics.sh --bootstrap-server $KAFKA_BOOTSTRAP --list
+
+---
+# ==================== EVENT SCHEMAS CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-event-schemas
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: schema
+data:
+  # CloudEvents-compliant event schemas
+  task-created.json: |
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "required": ["specversion", "type", "source", "id", "data"],
+      "properties": {
+        "specversion": {"const": "1.0"},
+        "type": {"const": "com.myapp.task.created"},
+        "source": {"type": "string"},
+        "id": {"type": "string", "format": "uuid"},
+        "time": {"type": "string", "format": "date-time"},
+        "data": {
+          "type": "object",
+          "required": ["task_id", "user_id", "title"],
+          "properties": {
+            "task_id": {"type": "integer"},
+            "user_id": {"type": "string"},
+            "title": {"type": "string", "maxLength": 255},
+            "description": {"type": "string"},
+            "due_date": {"type": "string", "format": "date-time"},
+            "created_at": {"type": "string", "format": "date-time"}
+          }
+        }
+      }
+    }
+
+  task-completed.json: |
+    {
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "object",
+      "required": ["specversion", "type", "source", "id", "data"],
+      "properties": {
+        "specversion": {"const": "1.0"},
+        "type": {"const": "com.myapp.task.completed"},
+        "source": {"type": "string"},
+        "id": {"type": "string", "format": "uuid"},
+        "time": {"type": "string", "format": "date-time"},
+        "data": {
+          "type": "object",
+          "required": ["task_id", "user_id", "completed_at"],
+          "properties": {
+            "task_id": {"type": "integer"},
+            "user_id": {"type": "string"},
+            "title": {"type": "string"},
+            "completed_at": {"type": "string", "format": "date-time"},
+            "duration_seconds": {"type": "integer"}
+          }
+        }
+      }
+    }
+
+---
+# ==================== MONITORING CONFIGMAP ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-monitoring-config
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}
+    component: monitoring
+data:
+  # Prometheus scrape config
+  prometheus-targets.yaml: |
+    - job_name: 'event-driven-services'
+      kubernetes_sd_configs:
+        - role: pod
+          namespaces:
+            names:
+              - {{app.namespace}}
+      relabel_configs:
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+          action: keep
+          regex: true
+        - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+          action: replace
+          target_label: __address__
+          regex: (.+)
+          replacement: $1
+
+  # Key metrics to monitor
+  metrics-guide.md: |
+    # Event-Driven Metrics Guide
+
+    ## Kafka Metrics
+    - kafka_consumer_lag: Messages waiting to be processed
+    - kafka_messages_consumed_total: Total messages consumed
+    - kafka_messages_produced_total: Total messages produced
+
+    ## Dapr Metrics
+    - dapr_component_pubsub_ingress_count: Messages received
+    - dapr_component_pubsub_egress_count: Messages published
+    - dapr_component_pubsub_error_count: Publish/subscribe errors
+    - dapr_component_state_count: State operations
+
+    ## Application Metrics
+    - event_processing_duration_seconds: Time to process events
+    - event_processing_errors_total: Failed event processing
+    - dead_letter_events_total: Events sent to dead letter

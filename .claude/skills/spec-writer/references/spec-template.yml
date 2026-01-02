@@ -1,0 +1,94 @@
+# Feature Specification Template
+
+feature_structure:
+  title: "# Feature: [Feature Name]"
+  sections:
+    - constitution_alignment
+    - user_story
+    - acceptance_criteria
+    - edge_cases
+    - business_rules
+    - dependencies
+    - out_of_scope
+    - technical_notes
+
+user_story_format:
+  template: |
+    AS A [role/persona]
+    I WANT TO [action/capability]
+    SO THAT [benefit/value]
+
+  examples:
+    - "AS A busy professional I WANT TO quickly add tasks via voice SO THAT I don't need to stop what I'm doing"
+    - "AS A project manager I WANT TO assign tasks to team members SO THAT work is distributed efficiently"
+
+acceptance_criteria:
+  format: "Checkbox list with testable statements"
+  template: |
+    - [ ] Criterion 1 (specific, measurable)
+    - [ ] Criterion 2
+
+  good_examples:
+    - "User can create task with title (1-200 characters)"
+    - "API responds in <200ms at 95th percentile"
+    - "Error messages are displayed for 5 seconds"
+
+  bad_examples:
+    - "System is fast" (not measurable)
+    - "UI looks good" (subjective)
+    - "Works well" (vague)
+
+edge_cases:
+  format: "Table with Scenario and Expected Behavior columns"
+  template: |
+    | Scenario | Expected Behavior |
+    |----------|-------------------|
+    | Empty input | Show validation error "Title required" |
+    | Network timeout | Show retry button, preserve user input |
+
+  categories:
+    - "Empty/null inputs"
+    - "Boundary values (min/max length, dates)"
+    - "Invalid data types"
+    - "Concurrent modifications"
+    - "Network errors"
+    - "Permission errors"
+
+business_rules:
+  format: |
+    **ALWAYS:**
+    - Explicit requirement
+
+    **NEVER:**
+    - Explicit prohibition
+
+  examples:
+    always:
+      - "Validate user authentication before data access"
+      - "Record timestamps in UTC"
+      - "Use soft deletes (set deleted_at, don't remove rows)"
+    never:
+      - "Expose user data to unauthenticated requests"
+      - "Store passwords in plain text"
+      - "Allow hard deletes of user data"
+
+dependencies:
+  examples:
+    - "Users table must exist with id, email columns"
+    - "Better Auth must be configured with JWT plugin"
+    - "API endpoint POST /api/auth/login must return access_token"
+
+out_of_scope:
+  purpose: "Prevent scope creep, clarify boundaries"
+  examples:
+    - "Bulk operations (separate feature)"
+    - "Mobile app (Phase VI)"
+    - "Task sharing with other users (future enhancement)"
+
+technical_notes:
+  optional: true
+  use_when: "Implementation hints help without prescribing exact solution"
+  examples:
+    - "Consider using WebSocket for real-time updates"
+    - "Index user_id column for query performance"
+    - "Use optimistic UI updates for better UX"

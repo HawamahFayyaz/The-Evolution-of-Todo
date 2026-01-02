@@ -1,0 +1,97 @@
+# Helm Chart Template Reference
+
+chart_structure:
+  required_files:
+    - Chart.yaml
+    - values.yaml
+    - templates/deployment.yaml
+    - templates/service.yaml
+
+  optional_files:
+    - templates/ingress.yaml
+    - templates/configmap.yaml
+    - templates/secret.yaml
+    - templates/hpa.yaml
+    - templates/NOTES.txt
+    - values-dev.yaml
+    - values-prod.yaml
+
+helm_template_syntax:
+  accessing_values: "{{ .Values.backend.name }}"
+  conditionals: "{{- if .Values.ingress.enabled }}"
+  loops: "{{- range .Values.env }}"
+  functions:
+    - "{{ .Values.secret | b64enc }}"
+    - "{{ .Values.name | quote }}"
+    - "{{ .Values.config | toYaml | nindent 10 }}"
+
+resource_requests_and_limits:
+  pattern: |
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+  guidelines:
+    - "requests: guaranteed resources"
+    - "limits: maximum resources"
+    - "requests <= limits"
+    - "Always set both in production"
+
+health_probes:
+  liveness:
+    purpose: "Restart container if unhealthy"
+    example: |
+      livenessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 30
+        periodSeconds: 10
+
+  readiness:
+    purpose: "Don't send traffic if not ready"
+    example: |
+      readinessProbe:
+        httpGet:
+          path: /health
+          port: 8000
+        initialDelaySeconds: 10
+        periodSeconds: 5
+
+horizontal_pod_autoscaler:
+  api_version: "autoscaling/v2"
+  metrics:
+    - cpu_utilization
+    - memory_utilization
+  example: |
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+
+ingress:
+  controllers:
+    - nginx
+    - traefik
+    - istio
+  example: |
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      annotations:
+        cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    spec:
+      ingressClassName: nginx
+      rules:
+        - host: example.com
+          http:
+            paths:
+              - path: /
+                pathType: Prefix
+                backend:
+                  service:
+                    name: frontend
+                    port: 80

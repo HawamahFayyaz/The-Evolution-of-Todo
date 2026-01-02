@@ -1,0 +1,430 @@
+# ============================================================
+# STATEFULSETS - Kafka and PostgreSQL
+# ============================================================
+# Kafka: Message broker for event streaming
+# PostgreSQL: State store for Dapr consumers
+#
+# For production: Consider Strimzi Operator for Kafka
+# ============================================================
+
+---
+# ==================== KAFKA STATEFULSET ====================
+# Simple Kafka cluster (use Strimzi for production)
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{app.name}}-kafka
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-kafka
+    component: kafka
+spec:
+  serviceName: {{app.name}}-kafka-headless
+  replicas: {{kafka.replicas}}
+  podManagementPolicy: Parallel
+
+  selector:
+    matchLabels:
+      app: {{app.name}}-kafka
+
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-kafka
+        component: kafka
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9308"
+    spec:
+      terminationGracePeriodSeconds: 300
+
+      securityContext:
+        fsGroup: 1001
+
+      containers:
+      - name: kafka
+        image: {{kafka.image.repository}}:{{kafka.image.tag}}
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: kafka
+          containerPort: 9092
+        - name: kafka-internal
+          containerPort: 9093
+        - name: jmx
+          containerPort: 9999
+
+        env:
+        # KRaft mode (no Zookeeper needed for Kafka 3.x+)
+        - name: KAFKA_CFG_NODE_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: KAFKA_CFG_PROCESS_ROLES
+          value: "broker,controller"
+        - name: KAFKA_CFG_CONTROLLER_QUORUM_VOTERS
+          value: "0@{{app.name}}-kafka-0.{{app.name}}-kafka-headless:9093,1@{{app.name}}-kafka-1.{{app.name}}-kafka-headless:9093,2@{{app.name}}-kafka-2.{{app.name}}-kafka-headless:9093"
+        - name: KAFKA_CFG_LISTENERS
+          value: "PLAINTEXT://:9092,CONTROLLER://:9093"
+        - name: KAFKA_CFG_ADVERTISED_LISTENERS
+          value: "PLAINTEXT://$(POD_NAME).{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+        - name: KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP
+          value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+        - name: KAFKA_CFG_CONTROLLER_LISTENER_NAMES
+          value: "CONTROLLER"
+        - name: KAFKA_CFG_INTER_BROKER_LISTENER_NAME
+          value: "PLAINTEXT"
+
+        # Kafka configuration
+        - name: KAFKA_CFG_NUM_PARTITIONS
+          value: "{{kafka.config.numPartitions}}"
+        - name: KAFKA_CFG_DEFAULT_REPLICATION_FACTOR
+          value: "{{kafka.config.replicationFactor}}"
+        - name: KAFKA_CFG_MIN_INSYNC_REPLICAS
+          value: "{{kafka.config.minInsyncReplicas}}"
+        - name: KAFKA_CFG_LOG_RETENTION_HOURS
+          value: "{{kafka.config.logRetentionHours}}"
+        - name: KAFKA_CFG_AUTO_CREATE_TOPICS_ENABLE
+          value: "{{kafka.config.autoCreateTopics}}"
+
+        # Pod name for node ID calculation
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+
+        resources:
+          requests:
+            cpu: {{kafka.resources.requests.cpu}}
+            memory: {{kafka.resources.requests.memory}}
+          limits:
+            cpu: {{kafka.resources.limits.cpu}}
+            memory: {{kafka.resources.limits.memory}}
+
+        livenessProbe:
+          tcpSocket:
+            port: kafka
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 6
+
+        readinessProbe:
+          tcpSocket:
+            port: kafka
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        volumeMounts:
+        - name: kafka-data
+          mountPath: /bitnami/kafka
+
+  volumeClaimTemplates:
+  - metadata:
+      name: kafka-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: {{kafka.storage.storageClassName}}
+      resources:
+        requests:
+          storage: {{kafka.storage.size}}
+
+---
+# ==================== ZOOKEEPER STATEFULSET (Optional) ====================
+# Only needed if not using KRaft mode
+# {{#if kafka.zookeeper.enabled}}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{app.name}}-zookeeper
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-zookeeper
+    component: zookeeper
+spec:
+  serviceName: {{app.name}}-zookeeper-headless
+  replicas: {{kafka.zookeeper.replicas}}
+  podManagementPolicy: Parallel
+
+  selector:
+    matchLabels:
+      app: {{app.name}}-zookeeper
+
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-zookeeper
+        component: zookeeper
+    spec:
+      securityContext:
+        fsGroup: 1001
+
+      containers:
+      - name: zookeeper
+        image: bitnami/zookeeper:3.9
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: client
+          containerPort: 2181
+        - name: follower
+          containerPort: 2888
+        - name: election
+          containerPort: 3888
+
+        env:
+        - name: ALLOW_ANONYMOUS_LOGIN
+          value: "yes"
+        - name: ZOO_SERVER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: ZOO_SERVERS
+          value: "{{app.name}}-zookeeper-0.{{app.name}}-zookeeper-headless:2888:3888,{{app.name}}-zookeeper-1.{{app.name}}-zookeeper-headless:2888:3888,{{app.name}}-zookeeper-2.{{app.name}}-zookeeper-headless:2888:3888"
+
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        livenessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - echo ruok | nc localhost 2181 | grep imok
+          initialDelaySeconds: 30
+          periodSeconds: 20
+
+        readinessProbe:
+          exec:
+            command:
+            - /bin/bash
+            - -c
+            - echo ruok | nc localhost 2181 | grep imok
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+        volumeMounts:
+        - name: zookeeper-data
+          mountPath: /bitnami/zookeeper
+
+  volumeClaimTemplates:
+  - metadata:
+      name: zookeeper-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: {{kafka.storage.storageClassName}}
+      resources:
+        requests:
+          storage: {{kafka.zookeeper.storage.size}}
+# {{/if}}
+
+---
+# ==================== POSTGRESQL STATEFULSET ====================
+# State store for Dapr consumers
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{app.name}}-postgresql
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-postgresql
+    component: state-store
+spec:
+  serviceName: {{app.name}}-postgresql-headless
+  replicas: 1
+
+  selector:
+    matchLabels:
+      app: {{app.name}}-postgresql
+
+  template:
+    metadata:
+      labels:
+        app: {{app.name}}-postgresql
+        component: state-store
+    spec:
+      securityContext:
+        fsGroup: 999
+
+      containers:
+      - name: postgresql
+        image: {{postgresql.image.repository}}:{{postgresql.image.tag}}
+        imagePullPolicy: IfNotPresent
+
+        ports:
+        - name: postgresql
+          containerPort: 5432
+
+        env:
+        - name: POSTGRES_DB
+          value: "{{postgresql.database}}"
+        - name: POSTGRES_USER
+          value: "{{postgresql.username}}"
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{app.name}}-secrets
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+
+        resources:
+          requests:
+            cpu: {{postgresql.resources.requests.cpu}}
+            memory: {{postgresql.resources.requests.memory}}
+          limits:
+            cpu: {{postgresql.resources.limits.cpu}}
+            memory: {{postgresql.resources.limits.memory}}
+
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - {{postgresql.username}}
+            - -d
+            - {{postgresql.database}}
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - {{postgresql.username}}
+            - -d
+            - {{postgresql.database}}
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+
+        volumeMounts:
+        - name: postgresql-data
+          mountPath: /var/lib/postgresql/data
+        - name: init-scripts
+          mountPath: /docker-entrypoint-initdb.d
+
+      volumes:
+      - name: init-scripts
+        configMap:
+          name: {{app.name}}-postgresql-init
+
+  volumeClaimTemplates:
+  - metadata:
+      name: postgresql-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: {{postgresql.storage.storageClassName}}
+      resources:
+        requests:
+          storage: {{postgresql.storage.size}}
+
+---
+# ==================== POSTGRESQL INIT SCRIPTS ====================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{app.name}}-postgresql-init
+  namespace: {{app.namespace}}
+data:
+  01-init-dapr-state.sql: |
+    -- Dapr state store table
+    CREATE TABLE IF NOT EXISTS dapr_state (
+        key TEXT NOT NULL PRIMARY KEY,
+        value JSONB NOT NULL,
+        isbinary BOOLEAN NOT NULL DEFAULT FALSE,
+        insertdate TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        updatedate TIMESTAMP WITH TIME ZONE NULL
+    );
+
+    -- Index for faster lookups
+    CREATE INDEX IF NOT EXISTS idx_dapr_state_key ON dapr_state(key);
+
+    -- Event processing tracking (for idempotency)
+    CREATE TABLE IF NOT EXISTS processed_events (
+        event_id UUID PRIMARY KEY,
+        event_type VARCHAR(255) NOT NULL,
+        processed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        consumer_id VARCHAR(255) NOT NULL,
+        result JSONB
+    );
+
+    -- Index for event lookups
+    CREATE INDEX IF NOT EXISTS idx_processed_events_type ON processed_events(event_type);
+    CREATE INDEX IF NOT EXISTS idx_processed_events_consumer ON processed_events(consumer_id);
+
+    -- Analytics aggregations
+    CREATE TABLE IF NOT EXISTS analytics_aggregations (
+        id SERIAL PRIMARY KEY,
+        metric_name VARCHAR(255) NOT NULL,
+        metric_value NUMERIC NOT NULL,
+        window_start TIMESTAMP WITH TIME ZONE NOT NULL,
+        window_end TIMESTAMP WITH TIME ZONE NOT NULL,
+        dimensions JSONB,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+    );
+
+    -- Index for time-based queries
+    CREATE INDEX IF NOT EXISTS idx_analytics_window ON analytics_aggregations(window_start, window_end);
+    CREATE INDEX IF NOT EXISTS idx_analytics_metric ON analytics_aggregations(metric_name);
+
+---
+# ==================== STRIMZI KAFKA CLUSTER (Production) ====================
+# Uncomment to use Strimzi Operator instead of plain StatefulSet
+# Requires: Strimzi Operator installed in cluster
+#
+# apiVersion: kafka.strimzi.io/v1beta2
+# kind: Kafka
+# metadata:
+#   name: {{app.name}}-kafka
+#   namespace: {{app.namespace}}
+# spec:
+#   kafka:
+#     version: 3.6.0
+#     replicas: {{kafka.replicas}}
+#     listeners:
+#       - name: plain
+#         port: 9092
+#         type: internal
+#         tls: false
+#       - name: tls
+#         port: 9093
+#         type: internal
+#         tls: true
+#     config:
+#       offsets.topic.replication.factor: 3
+#       transaction.state.log.replication.factor: 3
+#       transaction.state.log.min.isr: 2
+#       default.replication.factor: 3
+#       min.insync.replicas: 2
+#       inter.broker.protocol.version: "3.6"
+#     storage:
+#       type: persistent-claim
+#       size: {{kafka.storage.size}}
+#       class: {{kafka.storage.storageClassName}}
+#     metricsConfig:
+#       type: jmxPrometheusExporter
+#       valueFrom:
+#         configMapKeyRef:
+#           name: kafka-metrics
+#           key: kafka-metrics-config.yml
+#   zookeeper:
+#     replicas: 3
+#     storage:
+#       type: persistent-claim
+#       size: {{kafka.zookeeper.storage.size}}
+#       class: {{kafka.storage.storageClassName}}
+#   entityOperator:
+#     topicOperator: {}
+#     userOperator: {}

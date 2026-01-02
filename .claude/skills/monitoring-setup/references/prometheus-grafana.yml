@@ -1,0 +1,86 @@
+# Prometheus & Grafana Configuration Reference
+
+prometheus_metrics_types:
+  counter:
+    description: "Monotonically increasing value (e.g., total requests)"
+    example: "http_requests_total"
+    operations: ["inc()"]
+
+  gauge:
+    description: "Value that can go up or down (e.g., active connections)"
+    example: "active_tasks"
+    operations: ["set()", "inc()", "dec()"]
+
+  histogram:
+    description: "Observations in configurable buckets (e.g., request duration)"
+    example: "http_request_duration_seconds"
+    operations: ["observe()"]
+    queries: ["histogram_quantile()"]
+
+  summary:
+    description: "Similar to histogram, calculates quantiles on client side"
+    example: "request_duration_summary"
+    operations: ["observe()"]
+
+common_prometheus_queries:
+  request_rate:
+    query: "rate(http_requests_total[5m])"
+    description: "Requests per second over 5 minutes"
+
+  error_rate:
+    query: "rate(http_requests_total{status=~'5..'}[5m]) / rate(http_requests_total[5m])"
+    description: "Percentage of requests returning 5xx errors"
+
+  p95_latency:
+    query: "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))"
+    description: "95th percentile response time"
+
+  top_users:
+    query: "topk(10, sum by(user_id) (rate(tasks_created_total[1h])))"
+    description: "Top 10 users by task creation rate"
+
+grafana_panel_types:
+  - "Time series (line/area chart)"
+  - "Stat (single value)"
+  - "Gauge (semi-circle indicator)"
+  - "Bar chart"
+  - "Table"
+  - "Heatmap"
+  - "Logs panel"
+
+alert_best_practices:
+  rules:
+    - "Alert on symptoms (users can't login) not causes (database CPU high)"
+    - "Include runbook link in alert description"
+    - "Set appropriate 'for' duration to avoid flapping"
+    - "Use severity levels: critical, warning, info"
+
+  example_alert:
+    name: "HighErrorRate"
+    expr: "rate(http_requests_total{status=~'5..'}[5m]) > 0.05"
+    for: "5m"
+    severity: "critical"
+    runbook: "https://wiki.example.com/runbooks/high-error-rate"
+
+structured_logging_format:
+  required_fields:
+    - "timestamp (ISO 8601 with timezone)"
+    - "level (INFO, WARNING, ERROR)"
+    - "message (human-readable)"
+    - "logger (module name)"
+
+  optional_fields:
+    - "user_id"
+    - "request_id"
+    - "trace_id"
+    - "duration_ms"
+    - "error (exception details)"
+
+  example:
+    timestamp: "2025-12-30T10:00:00Z"
+    level: "ERROR"
+    message: "Failed to create task"
+    logger: "app.routes.tasks"
+    user_id: "user_123"
+    request_id: "req_abc456"
+    error: "IntegrityError: duplicate key"

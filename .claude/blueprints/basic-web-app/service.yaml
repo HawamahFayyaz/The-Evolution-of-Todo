@@ -1,0 +1,75 @@
+# ============================================================
+# SERVICES - Network access to pods
+# ============================================================
+# Backend: ClusterIP (internal only, accessed via Ingress)
+# Frontend: LoadBalancer (external access) or NodePort for Minikube
+# ============================================================
+
+---
+# ==================== BACKEND SERVICE ====================
+# ClusterIP: Only accessible within the cluster
+# Ingress routes /api/* traffic here
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-backend
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-backend
+    tier: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: {{app.name}}-backend
+  ports:
+  - name: http
+    port: {{backend.port.service}}
+    targetPort: {{backend.port.container}}
+    protocol: TCP
+
+---
+# ==================== FRONTEND SERVICE ====================
+# LoadBalancer: External access (cloud) or NodePort (Minikube)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{app.name}}-frontend
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-frontend
+    tier: frontend
+  annotations:
+    # AWS Load Balancer Controller annotations (if using AWS)
+    # service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    # service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+
+    # GCP annotations (if using GKE)
+    # cloud.google.com/neg: '{"ingress": true}'
+spec:
+  type: {{service.frontend.type}}  # LoadBalancer | NodePort | ClusterIP
+  selector:
+    app: {{app.name}}-frontend
+  ports:
+  - name: http
+    port: {{frontend.port.service}}
+    targetPort: {{frontend.port.container}}
+    protocol: TCP
+    # Uncomment for NodePort (Minikube):
+    # nodePort: 30080
+
+---
+# ==================== HEADLESS SERVICE (Optional) ====================
+# Use for StatefulSets or when you need DNS for individual pods
+# apiVersion: v1
+# kind: Service
+# metadata:
+#   name: {{app.name}}-backend-headless
+#   namespace: {{app.namespace}}
+# spec:
+#   type: ClusterIP
+#   clusterIP: None  # Headless
+#   selector:
+#     app: {{app.name}}-backend
+#   ports:
+#   - port: {{backend.port.service}}
+#     targetPort: {{backend.port.container}}

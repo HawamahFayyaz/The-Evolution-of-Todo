@@ -1,0 +1,70 @@
+# Web Speech API Reference
+
+browser_support:
+  chrome: "Yes (with webkit prefix)"
+  edge: "Yes"
+  safari: "Yes (iOS 14.5+)"
+  firefox: "No"
+  opera: "Yes"
+
+speech_recognition:
+  initialization: |
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = new SpeechRecognition();
+
+  properties:
+    continuous: "boolean (keep listening)"
+    interimResults: "boolean (show partial results)"
+    lang: "string (e.g., 'en-US', 'ur-PK')"
+    maxAlternatives: "number (alternative transcripts)"
+
+  events:
+    - "onstart: Recognition started"
+    - "onresult: Speech recognized"
+    - "onend: Recognition stopped"
+    - "onerror: Error occurred"
+    - "onnomatch: No speech recognized"
+
+speech_synthesis:
+  speak_text: |
+    const utterance = new SpeechSynthesisUtterance('Hello');
+    utterance.lang = 'en-US';
+    utterance.rate = 1.0;  // Speed (0.1-10)
+    utterance.pitch = 1.0;  // Pitch (0-2)
+    utterance.volume = 1.0;  // Volume (0-1)
+    window.speechSynthesis.speak(utterance);
+
+  control:
+    - "speechSynthesis.pause()"
+    - "speechSynthesis.resume()"
+    - "speechSynthesis.cancel()"
+
+common_voice_commands:
+  add_task:
+    - "Add buy groceries"
+    - "Create task call mom"
+    - "New task finish report"
+    - "Remember to pay bills"
+
+  list_tasks:
+    - "Show my tasks"
+    - "What's on my list"
+    - "List all tasks"
+    - "What do I need to do"
+
+  complete_task:
+    - "Mark task 1 as done"
+    - "Complete task 2"
+    - "I finished task 3"
+    - "Task 4 is done"
+
+  delete_task:
+    - "Delete task 1"
+    - "Remove task 2"
+    - "Get rid of task 3"
+
+error_handling:
+  not_allowed: "Microphone permission denied"
+  no_speech: "No speech detected"
+  aborted: "Recognition aborted"
+  network: "Network error"

@@ -1,0 +1,77 @@
+# Dapr Component Reference
+
+component_structure:
+  apiVersion: "dapr.io/v1alpha1"
+  kind: "Component"
+  metadata:
+    name: "component-name"
+  spec:
+    type: "component.type"
+    version: "v1"
+    metadata:
+      - name: "config-key"
+        value: "config-value"
+
+pubsub_types:
+  kafka:
+    type: "pubsub.kafka"
+    metadata:
+      - name: "brokers"
+        value: "kafka:9092"
+      - name: "consumerGroup"
+        value: "app-group"
+
+  redis:
+    type: "pubsub.redis"
+    metadata:
+      - name: "redisHost"
+        value: "redis:6379"
+
+state_store_types:
+  postgresql:
+    type: "state.postgresql"
+    metadata:
+      - name: "connectionString"
+        secretKeyRef:
+          name: "db-secret"
+          key: "url"
+
+  redis:
+    type: "state.redis"
+    metadata:
+      - name: "redisHost"
+        value: "redis:6379"
+
+dapr_apis:
+  pubsub:
+    publish: "POST http://localhost:3500/v1.0/publish/{pubsubname}/{topic}"
+    subscribe: "GET /dapr/subscribe (returns subscription list)"
+
+  state:
+    save: "POST http://localhost:3500/v1.0/state/{storename}"
+    get: "GET http://localhost:3500/v1.0/state/{storename}/{key}"
+    delete: "DELETE http://localhost:3500/v1.0/state/{storename}/{key}"
+
+  jobs:
+    schedule: "POST http://localhost:3500/v1.0-alpha1/jobs/{jobname}"
+    get: "GET http://localhost:3500/v1.0-alpha1/jobs/{jobname}"
+    delete: "DELETE http://localhost:3500/v1.0-alpha1/jobs/{jobname}"
+
+kubernetes_annotations:
+  enable_dapr: "dapr.io/enabled: 'true'"
+  app_id: "dapr.io/app-id: 'my-app'"
+  app_port: "dapr.io/app-port: '8000'"
+  log_level: "dapr.io/log-level: 'info'"
+
+jobs_api_scheduling:
+  one_time_job:
+    description: "Trigger at exact time (ISO 8601)"
+    example:
+      schedule: "2025-12-31T23:59:59Z"
+      repeats: 0
+
+  recurring_job:
+    description: "Repeat with interval"
+    example:
+      schedule: "@every 1h"
+      repeats: -1  # Infinite

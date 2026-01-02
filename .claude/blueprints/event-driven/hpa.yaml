@@ -1,0 +1,299 @@
+# ============================================================
+# HORIZONTAL POD AUTOSCALER - Event-Driven Components
+# ============================================================
+# Scaling strategies:
+# - Producer: Scale on CPU (event generation load)
+# - Consumers: Scale on CPU + KEDA Kafka lag (event backlog)
+#
+# For consumers, KEDA-based scaling on Kafka lag is recommended
+# as it directly measures work backlog vs CPU utilization
+# ============================================================
+
+---
+# ==================== PRODUCER HPA ====================
+# Scale based on event publishing load
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{app.name}}-producer-hpa
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-producer
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{app.name}}-producer
+
+  minReplicas: {{autoscaling.producer.minReplicas}}
+  maxReplicas: {{autoscaling.producer.maxReplicas}}
+
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.producer.targetCPU}}
+
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.producer.targetMemory}}
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 30
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+      selectPolicy: Min
+
+---
+# ==================== TASK PROCESSOR HPA ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{app.name}}-task-processor-hpa
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-task-processor
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{app.name}}-task-processor
+
+  minReplicas: {{autoscaling.consumers.minReplicas}}
+  maxReplicas: {{autoscaling.consumers.maxReplicas}}
+
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{autoscaling.consumers.targetCPU}}
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 15
+      policies:
+      - type: Percent
+        value: 200
+        periodSeconds: 15
+      - type: Pods
+        value: 6
+        periodSeconds: 15
+      selectPolicy: Max
+
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+
+---
+# ==================== NOTIFICATION SENDER HPA ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{app.name}}-notification-sender-hpa
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-notification-sender
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{app.name}}-notification-sender
+
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Pods
+        value: 4
+        periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60
+
+---
+# ==================== ANALYTICS AGGREGATOR HPA ====================
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{app.name}}-analytics-aggregator-hpa
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-analytics-aggregator
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{app.name}}-analytics-aggregator
+
+  minReplicas: 2
+  maxReplicas: 10
+
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Pods
+        value: 2
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 600
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 120
+
+---
+# ==================== KEDA SCALED OBJECTS (Recommended for Consumers) ====================
+# Scale based on Kafka consumer lag - much more responsive than CPU
+# Requires: KEDA installed in cluster
+#
+# Install KEDA:
+#   helm repo add kedacore https://kedacore.github.io/charts
+#   helm install keda kedacore/keda --namespace keda --create-namespace
+
+# {{#if autoscaling.consumers.keda.enabled}}
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{app.name}}-task-processor-keda
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-task-processor
+spec:
+  scaleTargetRef:
+    name: {{app.name}}-task-processor
+
+  minReplicaCount: {{autoscaling.consumers.minReplicas}}
+  maxReplicaCount: {{autoscaling.consumers.maxReplicas}}
+
+  # Cool down period before scaling down
+  cooldownPeriod: 300
+
+  # Polling interval for metrics
+  pollingInterval: 15
+
+  triggers:
+  # Scale based on Kafka consumer lag
+  - type: kafka
+    metadata:
+      bootstrapServers: "{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+      consumerGroup: "task-processor"
+      topic: "task-created"
+      lagThreshold: "{{autoscaling.consumers.keda.lagThreshold}}"
+      activationLagThreshold: "{{autoscaling.consumers.keda.activationLagThreshold}}"
+
+  - type: kafka
+    metadata:
+      bootstrapServers: "{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+      consumerGroup: "task-processor"
+      topic: "task-updated"
+      lagThreshold: "{{autoscaling.consumers.keda.lagThreshold}}"
+      activationLagThreshold: "{{autoscaling.consumers.keda.activationLagThreshold}}"
+
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{app.name}}-notification-sender-keda
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-notification-sender
+spec:
+  scaleTargetRef:
+    name: {{app.name}}-notification-sender
+
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  cooldownPeriod: 300
+  pollingInterval: 15
+
+  triggers:
+  - type: kafka
+    metadata:
+      bootstrapServers: "{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+      consumerGroup: "notification-sender"
+      topic: "task-completed"
+      lagThreshold: "50"
+      activationLagThreshold: "5"
+
+  - type: kafka
+    metadata:
+      bootstrapServers: "{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+      consumerGroup: "notification-sender"
+      topic: "user-registered"
+      lagThreshold: "50"
+      activationLagThreshold: "5"
+
+---
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{app.name}}-analytics-aggregator-keda
+  namespace: {{app.namespace}}
+  labels:
+    app: {{app.name}}-analytics-aggregator
+spec:
+  scaleTargetRef:
+    name: {{app.name}}-analytics-aggregator
+
+  minReplicaCount: 2
+  maxReplicaCount: 10
+  cooldownPeriod: 600
+  pollingInterval: 30
+
+  triggers:
+  - type: kafka
+    metadata:
+      bootstrapServers: "{{app.name}}-kafka-headless.{{app.namespace}}.svc.cluster.local:9092"
+      consumerGroup: "analytics-aggregator"
+      topic: "task-created"
+      lagThreshold: "200"
+      activationLagThreshold: "20"
+# {{/if}}
