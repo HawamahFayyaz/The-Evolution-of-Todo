@@ -1,0 +1,260 @@
+@import "tailwindcss";
+
+/* ============================================
+   DoNext Premium Design System v2.0
+   Indigo Dream Color Palette
+   ============================================ */
+
+:root {
+  /* Brand Colors */
+  --color-primary: #4F46E5;
+  --color-primary-light: #6366F1;
+  --color-primary-dark: #4338CA;
+  --color-accent: #764ba2;
+
+  /* Semantic Colors */
+  --color-success: #10B981;
+  --color-warning: #F59E0B;
+  --color-danger: #EF4444;
+  --color-info: #3B82F6;
+
+  /* Neutral Colors */
+  --background: #F9FAFB;
+  --foreground: #111827;
+  --surface: #ffffff;
+  --elevated: #F3F4F6;
+  --border: #E5E7EB;
+  --border-hover: #D1D5DB;
+  --text-primary: #111827;
+  --text-secondary: #6B7280;
+  --text-muted: #9CA3AF;
+
+  /* Gradients */
+  --gradient-brand: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --gradient-button: linear-gradient(to right, #4F46E5, #7C3AED);
+
+  /* Shadows */
+  --shadow-glow: 0 10px 30px rgba(79, 70, 229, 0.3);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-muted: var(--text-muted);
+
+  /* Primary palette */
+  --color-primary-50: #EEF2FF;
+  --color-primary-100: #E0E7FF;
+  --color-primary-200: #C7D2FE;
+  --color-primary-300: #A5B4FC;
+  --color-primary-400: #818CF8;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-700: #4338CA;
+  --color-primary-800: #3730A3;
+  --color-primary-900: #312E81;
+
+  /* Font family */
+  --font-sans: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Force light mode for now - dark mode can be added later */
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* ============================================
+   Custom CSS Utilities - DoNext Premium
+   ============================================ */
+
+/* Gradient Text Effect */
+.gradient-text {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glassmorphism Effect */
+.glass {
+  background: rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Float Animation */
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+/* Slide In Right Animation */
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+/* Slide Out Right Animation */
+@keyframes slide-out-right {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-out-right {
+  animation: slide-out-right 0.2s ease-in forwards;
+}
+
+/* Gradient Border Effect (for stat cards) */
+.gradient-border {
+  position: relative;
+  background: white;
+  border-radius: 1rem;
+}
+
+.gradient-border::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 1rem;
+  padding: 2px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 0.3s;
+  pointer-events: none;
+}
+
+.gradient-border:hover::before {
+  opacity: 1;
+}
+
+/* Premium Button Glow */
+.btn-glow {
+  box-shadow: 0 4px 14px 0 rgba(79, 70, 229, 0.39);
+}
+
+.btn-glow:hover {
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.5);
+}
+
+/* Focus ring utility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2;
+}
+
+/* Custom Checkbox Styles */
+.checkbox-premium {
+  @apply w-6 h-6 border-2 border-gray-300 rounded-md cursor-pointer
+    hover:border-indigo-500 transition-all duration-200
+    flex items-center justify-center;
+}
+
+.checkbox-premium.checked {
+  @apply bg-gradient-to-br from-indigo-500 to-purple-600 border-indigo-500;
+  transform: scale(1.05);
+}
+
+.checkbox-premium .checkmark {
+  @apply text-white font-bold text-sm;
+}
+
+/* Card Hover Effect */
+.card-hover {
+  @apply transition-all duration-300;
+}
+
+.card-hover:hover {
+  @apply shadow-md -translate-y-1 border-indigo-200;
+}
+
+/* Premium Badge */
+.badge-premium {
+  @apply px-2.5 py-0.5 rounded-full text-xs font-semibold ring-1;
+}
+
+/* Toast Base Styles */
+.toast {
+  @apply fixed top-4 right-4 z-50 px-4 py-3 rounded-lg shadow-lg
+    flex items-center gap-2;
+}
+
+.toast-success {
+  @apply bg-emerald-50 border border-emerald-200 text-emerald-800;
+}
+
+.toast-error {
+  @apply bg-red-50 border border-red-200 text-red-800;
+}
+
+.toast-info {
+  @apply bg-blue-50 border border-blue-200 text-blue-800;
+}
+
+/* Progress Bar */
+.progress-bar {
+  @apply w-full h-2 bg-gray-200 rounded-full overflow-hidden;
+}
+
+.progress-bar-fill {
+  @apply h-full bg-gradient-to-r from-indigo-500 to-purple-600
+    rounded-full transition-all duration-500;
+}
+
+/* Tab Navigation */
+.tab-nav {
+  @apply flex gap-1 bg-gray-100 p-1 rounded-lg;
+}
+
+.tab-item {
+  @apply px-4 py-2 rounded-md font-medium text-gray-600 cursor-pointer
+    transition-all hover:text-gray-900 hover:bg-gray-50;
+}
+
+.tab-item.active {
+  @apply bg-white text-indigo-600 shadow-sm font-semibold;
+}
+
+/* Accessibility: Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skip to main content link */
+.skip-link {
+  @apply sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4
+    focus:z-50 focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white
+    focus:rounded-lg focus:shadow-lg;
+}
