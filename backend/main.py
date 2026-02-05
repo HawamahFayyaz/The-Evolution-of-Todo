@@ -6,11 +6,15 @@ from typing import Any, AsyncGenerator
 from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlmodel import Session, text
 
 from config import get_settings
 from database import create_db_and_tables, get_session
+from rate_limiter import limiter, rate_limit_exceeded_handler
 from routes.tasks import router as tasks_router
 
 
@@ -58,6 +62,13 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
+
+# Configure rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+# GZip compression middleware (for responses > 500 bytes)
+app.add_middleware(GZipMiddleware, minimum_size=500)
 
 # CORS middleware configuration
 settings = get_settings()

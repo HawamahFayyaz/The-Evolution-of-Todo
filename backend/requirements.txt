@@ -5,6 +5,7 @@ python-jose[cryptography]>=3.3.0
 python-dotenv>=1.0.0
 psycopg2-binary>=2.9.9
 uvicorn>=0.32.0
+slowapi>=0.1.9
 
 # Development dependencies
 pytest>=8.0.0

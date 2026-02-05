@@ -12,7 +12,8 @@ from sqlmodel import Session, select
 
 from auth import get_current_user
 from database import get_session
-from models import Task
+from models import Task, TaskPriority
+from rate_limiter import limiter, RATE_LIMITS
 from security_logger import security_logger
 
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
@@ -24,6 +25,8 @@ class TaskCreate(BaseModel):
 
     title: str = Field(min_length=1, max_length=200)
     description: str = Field(default="", max_length=1000)
+    priority: TaskPriority = Field(default=TaskPriority.MEDIUM)
+    due_date: datetime | None = Field(default=None)
 
 
 class TaskUpdate(BaseModel):
@@ -32,6 +35,8 @@ class TaskUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = Field(default=None, max_length=1000)
     completed: bool | None = None
+    priority: TaskPriority | None = None
+    due_date: datetime | None = None
 
 
 class TaskResponse(BaseModel):
@@ -41,6 +46,8 @@ class TaskResponse(BaseModel):
     title: str
     description: str
     completed: bool
+    priority: TaskPriority
+    due_date: datetime | None
     created_at: datetime
     updated_at: datetime
 
@@ -123,8 +130,55 @@ def get_user_task(
 
 
 # Endpoints
+@router.get("/search", response_model=TaskListResponse)
+@limiter.limit(RATE_LIMITS["tasks_list"])
+async def search_tasks(
+    request: Request,
+    q: str,
+    session: Session = Depends(get_session),
+    current_user: str = Depends(get_current_user),
+    completed: bool | None = None,
+) -> TaskListResponse:
+    """Search tasks by title or description.
+
+    Args:
+        request: FastAPI request object.
+        q: Search query string (searches title and description).
+        session: Database session.
+        current_user: User ID from JWT token.
+        completed: Optional filter by completion status.
+
+    Returns:
+        TaskListResponse: Matching tasks with total count.
+    """
+    # Build base query with user isolation
+    query = select(Task).where(
+        Task.user_id == current_user,
+        Task.deleted_at.is_(None),
+    )
+
+    # Add search filter (case-insensitive)
+    search_pattern = f"%{q.lower()}%"
+    query = query.where(
+        (Task.title.ilike(search_pattern)) | (Task.description.ilike(search_pattern))
+    )
+
+    if completed is not None:
+        query = query.where(Task.completed == completed)
+
+    query = query.order_by(Task.created_at.desc())
+    tasks = session.exec(query).all()
+
+    return TaskListResponse(
+        tasks=[TaskResponse.model_validate(t) for t in tasks],
+        total=len(tasks),
+    )
+
+
 @router.get("", response_model=TaskListResponse)
+@limiter.limit(RATE_LIMITS["tasks_list"])
 async def list_tasks(
+    request: Request,
     session: Session = Depends(get_session),
     current_user: str = Depends(get_current_user),
     completed: bool | None = None,
@@ -182,7 +236,9 @@ async def get_task(
 
 
 @router.post("", response_model=TaskResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(RATE_LIMITS["tasks_create"])
 async def create_task(
+    request: Request,
     task_data: TaskCreate,
     session: Session = Depends(get_session),
     current_user: str = Depends(get_current_user),
@@ -190,7 +246,7 @@ async def create_task(
     """Create a new task for the authenticated user.
 
     Args:
-        task_data: Task creation data (title, description).
+        task_data: Task creation data (title, description, priority, due_date).
         session: Database session.
         current_user: User ID from JWT token (NEVER from request body).
 
@@ -202,6 +258,8 @@ async def create_task(
         user_id=current_user,
         title=task_data.title,
         description=task_data.description,
+        priority=task_data.priority,
+        due_date=task_data.due_date,
     )
 
     session.add(task)
@@ -212,6 +270,7 @@ async def create_task(
 
 
 @router.put("/{task_id}", response_model=TaskResponse)
+@limiter.limit(RATE_LIMITS["tasks_update"])
 async def update_task(
     task_id: int,
     task_data: TaskUpdate,
@@ -243,6 +302,10 @@ async def update_task(
         task.description = task_data.description
     if task_data.completed is not None:
         task.completed = task_data.completed
+    if task_data.priority is not None:
+        task.priority = task_data.priority
+    if task_data.due_date is not None:
+        task.due_date = task_data.due_date
 
     task.updated_at = datetime.now(UTC)
 
@@ -254,6 +317,7 @@ async def update_task(
 
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit(RATE_LIMITS["tasks_delete"])
 async def delete_task(
     task_id: int,
     request: Request,

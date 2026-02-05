@@ -2,13 +2,13 @@
  * Task item component - DoNext Premium.
  *
  * Displays a single task with premium checkbox, hover effects,
- * and edit/delete actions.
+ * priority badge, due date, and edit/delete actions.
  */
 
 "use client";
 
 import { useState } from "react";
-import type { Task } from "@/types";
+import type { Task, TaskPriority } from "@/types";
 import { Button } from "@/components/ui/button";
 
 interface TaskItemProps {
@@ -17,6 +17,40 @@ interface TaskItemProps {
   onEdit: (task: Task) => void;
   /** Called when delete button is clicked - parent handles confirmation */
   onDelete: () => void;
+}
+
+/** Priority badge configuration */
+const PRIORITY_CONFIG: Record<TaskPriority, { label: string; className: string }> = {
+  low: { label: "Low", className: "bg-gray-100 text-gray-600" },
+  medium: { label: "Medium", className: "bg-amber-100 text-amber-700" },
+  high: { label: "High", className: "bg-red-100 text-red-700" },
+};
+
+/** Check if a date is overdue */
+function isOverdue(dateStr: string | null): boolean {
+  if (!dateStr) return false;
+  const dueDate = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return dueDate < today;
+}
+
+/** Format due date for display */
+function formatDueDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (date.toDateString() === today.toDateString()) {
+    return "Today";
+  }
+  if (date.toDateString() === tomorrow.toDateString()) {
+    return "Tomorrow";
+  }
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
@@ -90,7 +124,7 @@ export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
         )}
 
         {/* Metadata row */}
-        <div className="flex items-center gap-3 mt-3">
+        <div className="flex items-center flex-wrap gap-2 mt-3">
           {/* Status badge */}
           {task.completed ? (
             <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full text-xs font-medium">
@@ -102,9 +136,43 @@ export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
             </span>
           )}
 
-          {/* Date */}
-          <span className="text-xs text-gray-500">
-            📅 {new Date(task.createdAt).toLocaleDateString()}
+          {/* Priority badge */}
+          <span
+            className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_CONFIG[task.priority].className}`}
+          >
+            {PRIORITY_CONFIG[task.priority].label}
+          </span>
+
+          {/* Due date badge */}
+          {task.dueDate && (
+            <span
+              className={`px-2.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${
+                !task.completed && isOverdue(task.dueDate)
+                  ? "bg-red-100 text-red-700"
+                  : "bg-indigo-100 text-indigo-700"
+              }`}
+            >
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
+              </svg>
+              {formatDueDate(task.dueDate)}
+              {!task.completed && isOverdue(task.dueDate) && " (Overdue)"}
+            </span>
+          )}
+
+          {/* Created date */}
+          <span className="text-xs text-gray-400">
+            Created {new Date(task.createdAt).toLocaleDateString()}
           </span>
         </div>
       </div>

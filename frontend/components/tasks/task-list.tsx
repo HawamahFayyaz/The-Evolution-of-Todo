@@ -7,12 +7,13 @@
 
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Task } from "@/types";
 import { useTasks } from "@/hooks/use-tasks";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TaskItem } from "./task-item";
 import { TaskForm } from "./task-form";
@@ -37,6 +38,8 @@ export function TaskList() {
     loading,
     error,
     refresh,
+    search,
+    clearSearch,
     createTask,
     updateTask,
     deleteTask,
@@ -48,6 +51,49 @@ export function TaskList() {
   const [formLoading, setFormLoading] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isSearching, setIsSearching] = useState(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced search handler
+  const handleSearchChange = useCallback(
+    (value: string) => {
+      setSearchQuery(value);
+
+      // Clear previous timeout
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      // Debounce search by 300ms
+      searchTimeoutRef.current = setTimeout(async () => {
+        if (value.trim()) {
+          setIsSearching(true);
+          await search(value);
+        } else {
+          setIsSearching(false);
+          await clearSearch();
+        }
+      }, 300);
+    },
+    [search, clearSearch]
+  );
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Clear search handler
+  function handleClearSearch() {
+    setSearchQuery("");
+    setIsSearching(false);
+    clearSearch();
+  }
 
   // Sync filter with URL when it changes
   useEffect(() => {
@@ -169,31 +215,89 @@ export function TaskList() {
         )}
       </div>
 
-      {/* Filter Tabs */}
-      {tasks.length > 0 && (
-        <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.value}
-              onClick={() => handleFilterChange(tab.value)}
-              className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
-                filter === tab.value
-                  ? "bg-white text-indigo-600 shadow-sm"
-                  : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-              }`}
-            >
-              {tab.label}
-              <span
-                className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
-                  filter === tab.value
-                    ? "bg-indigo-100 text-indigo-600"
-                    : "bg-gray-200 text-gray-600"
-                }`}
+      {/* Search and Filter */}
+      {(tasks.length > 0 || isSearching) && (
+        <div className="space-y-3">
+          {/* Search Input */}
+          <div className="relative">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+              <svg
+                className="h-5 w-5 text-gray-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
               >
-                {tab.count}
-              </span>
-            </button>
-          ))}
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                />
+              </svg>
+            </div>
+            <Input
+              type="text"
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              className="pl-10 pr-10"
+            />
+            {searchQuery && (
+              <button
+                onClick={handleClearSearch}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+              >
+                <svg
+                  className="h-5 w-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M6 18L18 6M6 6l12 12"
+                  />
+                </svg>
+              </button>
+            )}
+          </div>
+
+          {/* Filter Tabs - only show when not searching */}
+          {!isSearching && (
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.value}
+                  onClick={() => handleFilterChange(tab.value)}
+                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                    filter === tab.value
+                      ? "bg-white text-indigo-600 shadow-sm"
+                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
+                  }`}
+                >
+                  {tab.label}
+                  <span
+                    className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                      filter === tab.value
+                        ? "bg-indigo-100 text-indigo-600"
+                        : "bg-gray-200 text-gray-600"
+                    }`}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Search results indicator */}
+          {isSearching && (
+            <p className="text-sm text-gray-500">
+              Found {filteredTasks.length} result{filteredTasks.length !== 1 ? "s" : ""} for &quot;{searchQuery}&quot;
+            </p>
+          )}
         </div>
       )}
 
@@ -340,23 +444,58 @@ export function TaskList() {
         </Card>
       )}
 
-      {/* Empty state for filtered view */}
+      {/* Empty state for filtered/search view */}
       {!loading && tasks.length > 0 && filteredTasks.length === 0 && !showCreateForm && (
         <Card>
           <CardContent className="py-12 text-center">
-            <div className="text-5xl text-gray-300 mb-4">
-              {filter === "active" ? "🎉" : "📝"}
-            </div>
+            {isSearching ? (
+              <>
+                <div className="text-5xl text-gray-300 mb-4">🔍</div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  No results found
+                </h3>
+                <p className="text-gray-500 mb-4">
+                  No tasks match &quot;{searchQuery}&quot;
+                </p>
+                <Button variant="outline" onClick={handleClearSearch}>
+                  Clear search
+                </Button>
+              </>
+            ) : (
+              <>
+                <div className="text-5xl text-gray-300 mb-4">
+                  {filter === "active" ? "🎉" : "📝"}
+                </div>
+                <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                  {filter === "active"
+                    ? "All tasks completed!"
+                    : "No completed tasks yet"}
+                </h3>
+                <p className="text-gray-500">
+                  {filter === "active"
+                    ? "Great job! You've completed all your tasks."
+                    : "Complete some tasks to see them here."}
+                </p>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Empty state for search with no tasks */}
+      {!loading && tasks.length === 0 && isSearching && (
+        <Card>
+          <CardContent className="py-12 text-center">
+            <div className="text-5xl text-gray-300 mb-4">🔍</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              {filter === "active"
-                ? "All tasks completed!"
-                : "No completed tasks yet"}
+              No results found
             </h3>
-            <p className="text-gray-500">
-              {filter === "active"
-                ? "Great job! You've completed all your tasks."
-                : "Complete some tasks to see them here."}
+            <p className="text-gray-500 mb-4">
+              No tasks match &quot;{searchQuery}&quot;
             </p>
+            <Button variant="outline" onClick={handleClearSearch}>
+              Clear search
+            </Button>
           </CardContent>
         </Card>
       )}

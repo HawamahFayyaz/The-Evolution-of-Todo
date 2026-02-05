@@ -14,6 +14,7 @@ import {
   createTask as apiCreateTask,
   deleteTask as apiDeleteTask,
   listTasks as apiListTasks,
+  searchTasks as apiSearchTasks,
   toggleTaskCompletion as apiToggleTask,
   updateTask as apiUpdateTask,
 } from "@/lib/api/tasks";
@@ -28,6 +29,8 @@ interface UseTasksState {
 
 interface UseTasksActions {
   refresh: () => Promise<void>;
+  search: (query: string) => Promise<void>;
+  clearSearch: () => Promise<void>;
   createTask: (data: CreateTaskData) => Promise<Task | null>;
   updateTask: (taskId: number, data: UpdateTaskData) => Promise<Task | null>;
   deleteTask: (taskId: number) => Promise<boolean>;
@@ -87,7 +90,66 @@ export function useTasks(completedFilter?: boolean): UseTasksReturn {
 
   // Load tasks on mount and when filter changes
   useEffect(() => {
-    refresh();
+    const loadTasks = async () => {
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+
+      try {
+        const response = await apiListTasks(completedFilter);
+        setState({
+          tasks: response.tasks,
+          total: response.total,
+          loading: false,
+          error: null,
+        });
+      } catch (err) {
+        const message =
+          err instanceof ApiClientError
+            ? err.message
+            : "Failed to load tasks";
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: message,
+        }));
+      }
+    };
+    loadTasks();
+  }, [completedFilter]);
+
+  const search = useCallback(
+    async (query: string) => {
+      if (!query.trim()) {
+        await refresh();
+        return;
+      }
+
+      setState((prev) => ({ ...prev, loading: true, error: null }));
+
+      try {
+        const response = await apiSearchTasks(query, completedFilter);
+        setState({
+          tasks: response.tasks,
+          total: response.total,
+          loading: false,
+          error: null,
+        });
+      } catch (err) {
+        const message =
+          err instanceof ApiClientError
+            ? err.message
+            : "Failed to search tasks";
+        setState((prev) => ({
+          ...prev,
+          loading: false,
+          error: message,
+        }));
+      }
+    },
+    [completedFilter, refresh]
+  );
+
+  const clearSearch = useCallback(async () => {
+    await refresh();
   }, [refresh]);
 
   const createTask = useCallback(
@@ -196,6 +258,8 @@ export function useTasks(completedFilter?: boolean): UseTasksReturn {
   return {
     ...state,
     refresh,
+    search,
+    clearSearch,
     createTask,
     updateTask,
     deleteTask,

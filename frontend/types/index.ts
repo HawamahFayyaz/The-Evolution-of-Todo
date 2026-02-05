@@ -3,6 +3,11 @@
  */
 
 /**
+ * Task priority levels.
+ */
+export type TaskPriority = "low" | "medium" | "high";
+
+/**
  * Task entity representing a user's to-do item.
  * Matches backend TaskResponse schema.
  */
@@ -12,6 +17,8 @@ export interface Task {
   title: string;
   description: string;
   completed: boolean;
+  priority: TaskPriority;
+  dueDate: string | null; // ISO 8601 datetime or null
   createdAt: string; // ISO 8601 datetime
   updatedAt: string; // ISO 8601 datetime
 }
@@ -23,6 +30,8 @@ export interface Task {
 export interface CreateTaskData {
   title: string;
   description?: string;
+  priority?: TaskPriority;
+  due_date?: string | null;
 }
 
 /**
@@ -32,6 +41,8 @@ export interface CreateTaskData {
 export interface UpdateTaskData {
   title?: string;
   description?: string;
+  priority?: TaskPriority;
+  due_date?: string | null;
 }
 
 /**
@@ -77,6 +88,8 @@ export function transformTask(apiTask: {
   title: string;
   description: string;
   completed: boolean;
+  priority: TaskPriority;
+  due_date: string | null;
   created_at: string;
   updated_at: string;
 }): Task {
@@ -86,6 +99,8 @@ export function transformTask(apiTask: {
     title: apiTask.title,
     description: apiTask.description,
     completed: apiTask.completed,
+    priority: apiTask.priority,
+    dueDate: apiTask.due_date,
     createdAt: apiTask.created_at,
     updatedAt: apiTask.updated_at,
   };
