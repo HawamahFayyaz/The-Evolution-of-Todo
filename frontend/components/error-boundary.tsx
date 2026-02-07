@@ -86,21 +86,19 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
       // Default fallback UI
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="min-h-screen flex items-center justify-center bg-[var(--background)] px-4">
           <Card className="max-w-md w-full">
             <CardContent className="pt-8 pb-8 text-center">
-              {/* Error icon */}
-              <div className="text-6xl mb-6">
-                <span role="img" aria-label="Error">
-                  ⚠️
+              <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-50 flex items-center justify-center">
+                <span className="text-3xl" role="img" aria-label="Error">
+                  !
                 </span>
               </div>
 
-              {/* Error message */}
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+              <h1 className="text-xl font-bold text-slate-900 mb-2">
                 Something went wrong
               </h1>
-              <p className="text-gray-600 mb-6">
+              <p className="text-slate-500 text-sm mb-6">
                 We&apos;re sorry, but something unexpected happened. Please try
                 refreshing the page or go back to the home page.
               </p>

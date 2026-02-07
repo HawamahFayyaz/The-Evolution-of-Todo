@@ -1,17 +1,10 @@
-/**
- * Task form component.
- *
- * Handles creating and editing tasks with priority and due date.
- */
-
 "use client";
 
 import { useState } from "react";
 import type { Task, TaskPriority } from "@/types";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 
-/** Form data structure (compatible with both create and update) */
+
 interface TaskFormData {
   title: string;
   description: string;
@@ -19,38 +12,26 @@ interface TaskFormData {
   due_date: string | null;
 }
 
-/** Priority options for the dropdown */
 const PRIORITY_OPTIONS: { value: TaskPriority; label: string; color: string }[] = [
-  { value: "low", label: "Low", color: "text-gray-500" },
+  { value: "low", label: "Low", color: "text-slate-500" },
   { value: "medium", label: "Medium", color: "text-amber-600" },
   { value: "high", label: "High", color: "text-red-600" },
 ];
 
 interface TaskFormProps {
-  /** Task to edit, or undefined for create mode */
   task?: Task;
-  /** Callback when form is submitted */
   onSubmit: (data: TaskFormData) => Promise<void>;
-  /** Callback when form is cancelled */
   onCancel?: () => void;
-  /** Whether the form is submitting */
   loading?: boolean;
 }
 
-/** Convert datetime string to date input format (YYYY-MM-DD) */
 function toDateInputValue(datetime: string | null): string {
   if (!datetime) return "";
-  try {
-    return datetime.split("T")[0];
-  } catch {
-    return "";
-  }
+  try { return datetime.split("T")[0]; } catch { return ""; }
 }
 
-/** Convert date input value to ISO datetime string */
 function toISODateTime(dateValue: string): string | null {
   if (!dateValue) return null;
-  // Set time to end of day in UTC
   return `${dateValue}T23:59:59Z`;
 }
 
@@ -84,14 +65,13 @@ export function TaskForm({ task, onSubmit, onCancel, loading }: TaskFormProps) {
         priority,
         due_date: toISODateTime(dueDate),
       });
-      // Reset form on success for create mode
       if (!isEditing) {
         setTitle("");
         setDescription("");
         setPriority("medium");
         setDueDate("");
       }
-    } catch (err) {
+    } catch {
       setError("Failed to save task. Please try again.");
     }
   }
@@ -99,45 +79,45 @@ export function TaskForm({ task, onSubmit, onCancel, loading }: TaskFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+        <div className="bg-red-50 border border-red-100 text-red-700 px-3 py-2 rounded-lg text-sm">
           {error}
         </div>
       )}
 
-      <Input
-        label="Title"
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="What needs to be done?"
-        required
-        autoFocus={!isEditing}
-        maxLength={200}
-      />
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-[var(--text-secondary)]">Title</label>
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="What needs to be done?"
+          required
+          autoFocus={!isEditing}
+          maxLength={200}
+          className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
+        />
+      </div>
 
-      <div className="space-y-1">
-        <label className="block text-sm font-medium text-gray-700">
-          Description (optional)
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          Description <span className="text-[var(--text-muted)] font-normal">(optional)</span>
         </label>
         <textarea
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="Add more details..."
-          className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent resize-none"
+          className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 resize-none transition-shadow"
           rows={3}
           maxLength={1000}
         />
       </div>
 
-      {/* Priority and Due Date Row */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700">
-            Priority
-          </label>
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-[var(--text-secondary)]">Priority</label>
           <select
             value={priority}
             onChange={(e) => setPriority(e.target.value as TaskPriority)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent bg-white"
+            className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
           >
             {PRIORITY_OPTIONS.map((option) => (
               <option key={option.value} value={option.value}>
@@ -147,26 +127,26 @@ export function TaskForm({ task, onSubmit, onCancel, loading }: TaskFormProps) {
           </select>
         </div>
 
-        <div className="space-y-1">
-          <label className="block text-sm font-medium text-gray-700">
-            Due Date (optional)
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-[var(--text-secondary)]">
+            Due Date <span className="text-[var(--text-muted)] font-normal">(optional)</span>
           </label>
           <input
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
             min={new Date().toISOString().split("T")[0]}
           />
         </div>
       </div>
 
-      <div className="flex items-center gap-3 pt-2">
-        <Button type="submit" disabled={loading}>
+      <div className="flex items-center gap-3 pt-1">
+        <Button type="submit" disabled={loading} size="sm">
           {loading ? "Saving..." : isEditing ? "Save Changes" : "Add Task"}
         </Button>
         {onCancel && (
-          <Button type="button" variant="ghost" onClick={onCancel}>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
             Cancel
           </Button>
         )}
