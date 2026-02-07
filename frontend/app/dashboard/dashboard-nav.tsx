@@ -46,6 +46,7 @@ export function DashboardNav({ user }: DashboardNavProps) {
   const navLinks = [
     { href: "/dashboard", label: "Dashboard" },
     { href: "/dashboard/tasks", label: "Tasks" },
+    { href: "/dashboard/chat", label: "Chat AI" },
   ];
 
   return (

@@ -73,11 +73,20 @@ export async function apiClient<T>(
     (headers as Record<string, string>)["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-    credentials: "include", // Include cookies for Better Auth
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${endpoint}`, {
+      ...options,
+      headers,
+      credentials: "include", // Include cookies for Better Auth
+    });
+  } catch (err) {
+    throw new ApiClientError(
+      0,
+      "Unable to reach the server. Please check your connection and try again.",
+      "NETWORK_ERROR"
+    );
+  }
 
   if (!response.ok) {
     let errorMessage = "An error occurred";

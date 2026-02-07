@@ -1,30 +1,38 @@
-/**
- * Task list component - DoNext Premium.
- *
- * Displays all tasks with create/edit/delete functionality.
- * Features premium card styling, filter tabs, and empty states.
- */
-
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { Task } from "@/types";
+import { cn } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TaskItem } from "./task-item";
 import { TaskForm } from "./task-form";
+import { Plus, Search, X, CheckCircle, ClipboardList, RotateCcw } from "lucide-react";
 
 type FilterType = "all" | "active" | "completed";
+
+function TaskSkeleton() {
+  return (
+    <div className="space-y-3">
+      {[1, 2, 3].map((i) => (
+        <div key={i} className="flex items-start gap-3.5 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+          <div className="w-5 h-5 rounded-md skeleton flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <div className="h-4 w-2/3 skeleton" />
+            <div className="h-3 w-1/3 skeleton" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function TaskList() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Get filter from URL or default to "all"
   const filterParam = searchParams.get("filter") as FilterType | null;
   const [filter, setFilter] = useState<FilterType>(
     filterParam && ["all", "active", "completed"].includes(filterParam)
@@ -55,17 +63,10 @@ export function TaskList() {
   const [isSearching, setIsSearching] = useState(false);
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Debounced search handler
   const handleSearchChange = useCallback(
     (value: string) => {
       setSearchQuery(value);
-
-      // Clear previous timeout
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-
-      // Debounce search by 300ms
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
       searchTimeoutRef.current = setTimeout(async () => {
         if (value.trim()) {
           setIsSearching(true);
@@ -79,23 +80,18 @@ export function TaskList() {
     [search, clearSearch]
   );
 
-  // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     };
   }, []);
 
-  // Clear search handler
   function handleClearSearch() {
     setSearchQuery("");
     setIsSearching(false);
     clearSearch();
   }
 
-  // Sync filter with URL when it changes
   useEffect(() => {
     const currentFilter = searchParams.get("filter");
     if (currentFilter !== filter) {
@@ -110,18 +106,11 @@ export function TaskList() {
     }
   }, [filter, router, searchParams]);
 
-  // Handle filter change
-  function handleFilterChange(newFilter: FilterType) {
-    setFilter(newFilter);
-  }
-
   async function handleCreate(data: { title: string; description: string }) {
     setFormLoading(true);
     try {
       const result = await createTask(data);
-      if (result) {
-        setShowCreateForm(false);
-      }
+      if (result) setShowCreateForm(false);
     } finally {
       setFormLoading(false);
     }
@@ -132,9 +121,7 @@ export function TaskList() {
     setFormLoading(true);
     try {
       const result = await updateTask(editingTask.id, data);
-      if (result) {
-        setEditingTask(null);
-      }
+      if (result) setEditingTask(null);
     } finally {
       setFormLoading(false);
     }
@@ -142,10 +129,6 @@ export function TaskList() {
 
   async function handleToggle(taskId: number) {
     await toggleTask(taskId);
-  }
-
-  function handleDeleteClick(task: Task) {
-    setTaskToDelete(task);
   }
 
   async function handleConfirmDelete() {
@@ -159,131 +142,86 @@ export function TaskList() {
     }
   }
 
-  function handleCancelDelete() {
-    setTaskToDelete(null);
-  }
-
-  function handleEdit(task: Task) {
-    setEditingTask(task);
-    setShowCreateForm(false);
-  }
-
-  function handleCancelEdit() {
-    setEditingTask(null);
-  }
-
-  function handleCancelCreate() {
-    setShowCreateForm(false);
-  }
-
-  // Filter tasks based on selected filter
   const filteredTasks = tasks.filter((t) => {
     if (filter === "active") return !t.completed;
     if (filter === "completed") return t.completed;
-    return true; // "all"
+    return true;
   });
 
-  // Separate completed and incomplete tasks for display
   const incompleteTasks = filteredTasks.filter((t) => !t.completed);
   const completedTasks = filteredTasks.filter((t) => t.completed);
 
-  // Filter tab configuration
   const filterTabs: { value: FilterType; label: string; count: number }[] = [
     { value: "all", label: "All", count: tasks.length },
     { value: "active", label: "Active", count: tasks.filter((t) => !t.completed).length },
-    { value: "completed", label: "Completed", count: tasks.filter((t) => t.completed).length },
+    { value: "completed", label: "Done", count: tasks.filter((t) => t.completed).length },
   ];
 
   return (
-    <div className="space-y-6">
-      {/* Header with add button */}
+    <div className="max-w-3xl mx-auto space-y-6">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            My Tasks
-          </h2>
-          <p className="text-sm text-gray-500 mt-1">
+          <h2 className="text-xl font-semibold text-[var(--text-primary)]">My Tasks</h2>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">
             {total === 0
               ? "No tasks yet"
-              : `${total} task${total === 1 ? "" : "s"} • ${tasks.filter((t) => !t.completed).length} remaining`}
+              : `${total} task${total === 1 ? "" : "s"} \u00B7 ${tasks.filter((t) => !t.completed).length} remaining`}
           </p>
         </div>
         {!showCreateForm && !editingTask && (
-          <Button variant="gradient" onClick={() => setShowCreateForm(true)}>
-            + New Task
+          <Button variant="gradient" size="sm" onClick={() => setShowCreateForm(true)}>
+            <Plus className="w-4 h-4" />
+            New Task
           </Button>
         )}
       </div>
 
-      {/* Search and Filter */}
+      {/* Search + Filters */}
       {(tasks.length > 0 || isSearching) && (
         <div className="space-y-3">
-          {/* Search Input */}
+          {/* Search */}
           <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <svg
-                className="h-5 w-5 text-gray-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </div>
-            <Input
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
+            <input
               type="text"
               placeholder="Search tasks..."
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="pl-10 pr-10"
+              className="w-full pl-9 pr-9 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
             />
             {searchQuery && (
               <button
                 onClick={handleClearSearch}
-                className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
               >
-                <svg
-                  className="h-5 w-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M6 18L18 6M6 6l12 12"
-                  />
-                </svg>
+                <X className="w-4 h-4" />
               </button>
             )}
           </div>
 
-          {/* Filter Tabs - only show when not searching */}
+          {/* Filter Tabs */}
           {!isSearching && (
-            <div className="flex gap-1 p-1 bg-gray-100 rounded-xl">
+            <div className="flex gap-1 p-1 bg-[var(--surface-secondary)] rounded-xl">
               {filterTabs.map((tab) => (
                 <button
                   key={tab.value}
-                  onClick={() => handleFilterChange(tab.value)}
-                  className={`flex-1 px-4 py-2 text-sm font-medium rounded-lg transition-all ${
+                  onClick={() => setFilter(tab.value)}
+                  className={cn(
+                    "flex-1 px-3 py-1.5 text-sm font-medium rounded-lg transition-all cursor-pointer",
                     filter === tab.value
-                      ? "bg-white text-indigo-600 shadow-sm"
-                      : "text-gray-600 hover:text-gray-900 hover:bg-gray-50"
-                  }`}
+                      ? "bg-[var(--surface)] text-[var(--text-primary)] shadow-sm"
+                      : "text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                  )}
                 >
                   {tab.label}
                   <span
-                    className={`ml-2 text-xs px-2 py-0.5 rounded-full ${
+                    className={cn(
+                      "ml-1.5 text-[11px] px-1.5 py-0.5 rounded-full",
                       filter === tab.value
-                        ? "bg-indigo-100 text-indigo-600"
-                        : "bg-gray-200 text-gray-600"
-                    }`}
+                        ? "bg-indigo-100 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400"
+                        : "bg-[var(--surface-secondary)] text-[var(--text-muted)]"
+                    )}
                   >
                     {tab.count}
                   </span>
@@ -292,218 +230,173 @@ export function TaskList() {
             </div>
           )}
 
-          {/* Search results indicator */}
           {isSearching && (
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-[var(--text-secondary)]">
               Found {filteredTasks.length} result{filteredTasks.length !== 1 ? "s" : ""} for &quot;{searchQuery}&quot;
             </p>
           )}
         </div>
       )}
 
-      {/* Error message */}
+      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between">
+        <div className="flex items-center justify-between bg-red-50 border border-red-100 text-red-700 px-4 py-3 rounded-xl text-sm">
           <p>{error}</p>
-          <button
-            onClick={refresh}
-            className="text-sm font-medium underline hover:no-underline"
-          >
-            Try again
+          <button onClick={refresh} className="inline-flex items-center gap-1 text-sm font-medium hover:underline">
+            <RotateCcw className="w-3.5 h-3.5" />
+            Retry
           </button>
         </div>
       )}
 
       {/* Create form */}
       {showCreateForm && (
-        <Card className="border-2 border-indigo-200 shadow-lg">
-          <CardHeader>
-            <h3 className="text-lg font-semibold text-gray-900">New Task</h3>
-          </CardHeader>
-          <CardContent>
-            <TaskForm
-              onSubmit={handleCreate}
-              onCancel={handleCancelCreate}
-              loading={formLoading}
-            />
-          </CardContent>
-        </Card>
+        <div className="bg-[var(--surface)] border-2 border-indigo-200 dark:border-indigo-800 rounded-xl p-5 shadow-sm animate-fade-in">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">New Task</h3>
+          <TaskForm
+            onSubmit={handleCreate}
+            onCancel={() => setShowCreateForm(false)}
+            loading={formLoading}
+          />
+        </div>
       )}
 
       {/* Edit form */}
       {editingTask && (
-        <Card className="border-2 border-indigo-200 shadow-lg">
-          <CardHeader>
-            <h3 className="text-lg font-semibold text-gray-900">Edit Task</h3>
-          </CardHeader>
-          <CardContent>
-            <TaskForm
-              task={editingTask}
-              onSubmit={handleUpdate}
-              onCancel={handleCancelEdit}
-              loading={formLoading}
-            />
-          </CardContent>
-        </Card>
+        <div className="bg-[var(--surface)] border-2 border-indigo-200 dark:border-indigo-800 rounded-xl p-5 shadow-sm animate-fade-in">
+          <h3 className="text-sm font-semibold text-[var(--text-primary)] mb-4">Edit Task</h3>
+          <TaskForm
+            task={editingTask}
+            onSubmit={handleUpdate}
+            onCancel={() => setEditingTask(null)}
+            loading={formLoading}
+          />
+        </div>
       )}
 
-      {/* Loading state */}
-      {loading && (
-        <Card>
-          <CardContent className="py-12">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin w-8 h-8 border-4 border-indigo-600 border-t-transparent rounded-full mb-4" />
-              <p className="text-gray-500">Loading tasks...</p>
-            </div>
-          </CardContent>
-        </Card>
-      )}
+      {/* Loading skeleton */}
+      {loading && <TaskSkeleton />}
 
       {/* Task list */}
       {!loading && filteredTasks.length > 0 && (
         <div className="space-y-6">
-          {/* Show tasks based on filter */}
           {filter === "all" ? (
             <>
-              {/* Incomplete tasks */}
               {incompleteTasks.length > 0 && (
-                <Card className="overflow-hidden">
-                  <CardContent className="p-0">
-                    {incompleteTasks.map((task) => (
+                <div className="space-y-2">
+                  {incompleteTasks.map((task) => (
+                    <TaskItem
+                      key={task.id}
+                      task={task}
+                      onToggle={handleToggle}
+                      onEdit={(t) => {
+                        setEditingTask(t);
+                        setShowCreateForm(false);
+                      }}
+                      onDelete={() => setTaskToDelete(task)}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {completedTasks.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-500" />
+                    <span className="text-sm font-medium text-[var(--text-muted)]">
+                      Completed ({completedTasks.length})
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {completedTasks.map((task) => (
                       <TaskItem
                         key={task.id}
                         task={task}
                         onToggle={handleToggle}
-                        onEdit={handleEdit}
-                        onDelete={() => handleDeleteClick(task)}
+                        onEdit={(t) => {
+                          setEditingTask(t);
+                          setShowCreateForm(false);
+                        }}
+                        onDelete={() => setTaskToDelete(task)}
                       />
                     ))}
-                  </CardContent>
-                </Card>
-              )}
-
-              {/* Completed tasks */}
-              {completedTasks.length > 0 && (
-                <div>
-                  <h3 className="text-sm font-medium text-gray-500 mb-3 flex items-center gap-2">
-                    <span className="bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full text-xs">
-                      ✓
-                    </span>
-                    Completed ({completedTasks.length})
-                  </h3>
-                  <Card className="overflow-hidden">
-                    <CardContent className="p-0">
-                      {completedTasks.map((task) => (
-                        <TaskItem
-                          key={task.id}
-                          task={task}
-                          onToggle={handleToggle}
-                          onEdit={handleEdit}
-                          onDelete={() => handleDeleteClick(task)}
-                        />
-                      ))}
-                    </CardContent>
-                  </Card>
+                  </div>
                 </div>
               )}
             </>
           ) : (
-            /* Filtered view (active or completed only) */
-            <Card className="overflow-hidden">
-              <CardContent className="p-0">
-                {filteredTasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    onToggle={handleToggle}
-                    onEdit={handleEdit}
-                    onDelete={() => handleDeleteClick(task)}
-                  />
-                ))}
-              </CardContent>
-            </Card>
+            <div className="space-y-2">
+              {filteredTasks.map((task) => (
+                <TaskItem
+                  key={task.id}
+                  task={task}
+                  onToggle={handleToggle}
+                  onEdit={(t) => {
+                    setEditingTask(t);
+                    setShowCreateForm(false);
+                  }}
+                  onDelete={() => setTaskToDelete(task)}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}
 
-      {/* Empty state - no tasks at all */}
+      {/* Empty states */}
       {!loading && tasks.length === 0 && !showCreateForm && (
-        <Card>
-          <CardContent className="py-16 text-center">
-            <div className="text-6xl text-gray-300 mb-4">📋</div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              No tasks yet
-            </h3>
-            <p className="text-gray-500 mb-6">
-              Create your first task to get started
-            </p>
-            <Button variant="gradient" onClick={() => setShowCreateForm(true)}>
-              + Create your first task
-            </Button>
-          </CardContent>
-        </Card>
+        <div className="text-center py-16 bg-[var(--surface)] border border-[var(--border)] rounded-xl">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-[var(--surface-secondary)] flex items-center justify-center">
+            <ClipboardList className="w-8 h-8 text-[var(--text-muted)]" />
+          </div>
+          <h3 className="text-lg font-semibold text-[var(--text-primary)] mb-1">No tasks yet</h3>
+          <p className="text-sm text-[var(--text-secondary)] mb-6">Create your first task to get started</p>
+          <Button variant="gradient" onClick={() => setShowCreateForm(true)}>
+            <Plus className="w-4 h-4" />
+            Create your first task
+          </Button>
+        </div>
       )}
 
-      {/* Empty state for filtered/search view */}
       {!loading && tasks.length > 0 && filteredTasks.length === 0 && !showCreateForm && (
-        <Card>
-          <CardContent className="py-12 text-center">
-            {isSearching ? (
-              <>
-                <div className="text-5xl text-gray-300 mb-4">🔍</div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  No results found
-                </h3>
-                <p className="text-gray-500 mb-4">
-                  No tasks match &quot;{searchQuery}&quot;
-                </p>
-                <Button variant="outline" onClick={handleClearSearch}>
-                  Clear search
-                </Button>
-              </>
-            ) : (
-              <>
-                <div className="text-5xl text-gray-300 mb-4">
-                  {filter === "active" ? "🎉" : "📝"}
-                </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                  {filter === "active"
-                    ? "All tasks completed!"
-                    : "No completed tasks yet"}
-                </h3>
-                <p className="text-gray-500">
-                  {filter === "active"
-                    ? "Great job! You've completed all your tasks."
-                    : "Complete some tasks to see them here."}
-                </p>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <div className="text-center py-12 bg-[var(--surface)] border border-[var(--border)] rounded-xl">
+          {isSearching ? (
+            <>
+              <Search className="w-10 h-10 text-[var(--text-muted)] mx-auto mb-3" />
+              <h3 className="text-base font-semibold text-[var(--text-primary)] mb-1">No results found</h3>
+              <p className="text-sm text-[var(--text-secondary)] mb-4">
+                No tasks match &quot;{searchQuery}&quot;
+              </p>
+              <Button variant="outline" size="sm" onClick={handleClearSearch}>
+                Clear search
+              </Button>
+            </>
+          ) : (
+            <>
+              <div className="text-3xl mb-3">
+                {filter === "active" ? (
+                  <CheckCircle className="w-10 h-10 text-emerald-400 mx-auto" />
+                ) : (
+                  <ClipboardList className="w-10 h-10 text-[var(--text-muted)] mx-auto" />
+                )}
+              </div>
+              <h3 className="text-base font-semibold text-[var(--text-primary)] mb-1">
+                {filter === "active" ? "All tasks completed!" : "No completed tasks yet"}
+              </h3>
+              <p className="text-sm text-[var(--text-secondary)]">
+                {filter === "active"
+                  ? "Great job! You've completed all your tasks."
+                  : "Complete some tasks to see them here."}
+              </p>
+            </>
+          )}
+        </div>
       )}
 
-      {/* Empty state for search with no tasks */}
-      {!loading && tasks.length === 0 && isSearching && (
-        <Card>
-          <CardContent className="py-12 text-center">
-            <div className="text-5xl text-gray-300 mb-4">🔍</div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              No results found
-            </h3>
-            <p className="text-gray-500 mb-4">
-              No tasks match &quot;{searchQuery}&quot;
-            </p>
-            <Button variant="outline" onClick={handleClearSearch}>
-              Clear search
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Delete Confirmation Dialog */}
+      {/* Delete Confirmation */}
       <ConfirmDialog
         isOpen={!!taskToDelete}
-        onClose={handleCancelDelete}
+        onClose={() => setTaskToDelete(null)}
         onConfirm={handleConfirmDelete}
         title="Delete Task"
         message={
@@ -511,7 +404,6 @@ export function TaskList() {
             <p>
               Are you sure you want to delete{" "}
               <span className="font-semibold">&quot;{taskToDelete.title}&quot;</span>?
-              This action cannot be undone.
             </p>
           ) : null
         }

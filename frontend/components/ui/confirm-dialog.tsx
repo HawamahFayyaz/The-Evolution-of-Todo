@@ -102,18 +102,18 @@ export function ConfirmDialog({
         aria-modal="true"
         aria-labelledby="dialog-title"
         aria-describedby="dialog-description"
-        className="relative bg-white rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-[var(--surface)] border border-[var(--border)] rounded-xl shadow-2xl p-6 w-full max-w-md mx-4 animate-scale-in"
       >
         {/* Title */}
         <h2
           id="dialog-title"
-          className="text-xl font-semibold text-gray-900 mb-2"
+          className="text-xl font-semibold text-[var(--text-primary)] mb-2"
         >
           {title}
         </h2>
 
         {/* Message */}
-        <div id="dialog-description" className="text-gray-600 mb-6">
+        <div id="dialog-description" className="text-[var(--text-secondary)] mb-6">
           {message}
         </div>
 

@@ -2,17 +2,19 @@
 ============================================================================
 SYNC IMPACT REPORT
 ============================================================================
-Version Change: 1.0.0 → 1.1.0 (MINOR - Phase II additions)
+Version Change: 1.1.0 → 1.2.0 (MINOR - Phase III additions)
 
 Modified Principles: None (all existing principles preserved)
 
 Added Sections:
-- Phase II Principles (4 new principles: VII-X)
-- API Standards (under Technical Constraints)
-- Database Standards (under Technical Constraints)
-- Authentication Flow (under Technical Constraints)
-- Security Requirements (under Technical Constraints)
-- Code Standards: API Client Pattern (Phase II addition)
+- Phase III Principles (4 new principles: XI-XIV)
+- Phase III Technologies (under Tech Stack)
+- Phase III Database Tables (conversations, messages)
+- Chat API Standards (under Technical Constraints)
+- MCP Tool Requirements (under Technical Constraints)
+- Stateless Pattern Flow (under Technical Constraints)
+- Code Standards: MCP Tool Pattern (Phase III addition)
+- Code Standards: Conversation Model Pattern (Phase III addition)
 
 Removed Sections: None
 
@@ -40,8 +42,8 @@ existing functionality.
 
 **Phases**:
 - Phase I: Console CLI application (Python, in-memory storage) ✅ COMPLETED
-- Phase II: Full-stack web application (Next.js + FastAPI + PostgreSQL) ← CURRENT
-- Phase III: AI-powered chatbot interface (OpenAI Agents SDK + MCP)
+- Phase II: Full-stack web application (Next.js + FastAPI + PostgreSQL) ✅ COMPLETED
+- Phase III: AI-powered chatbot interface (OpenAI Agents SDK + MCP) ← CURRENT
 - Phase IV: Containerized Kubernetes deployment (Docker + Helm + Minikube)
 - Phase V: Cloud-native production system (Kafka + Dapr + CI/CD)
 
@@ -167,6 +169,56 @@ Frontend and backend MUST coexist in the same repository:
 **Rationale**: Monorepo enables atomic changes across the stack and prevents
 version drift between frontend and backend.
 
+## Phase III Principles
+
+### XI. Stateless Chat Architecture
+
+Server MUST hold NO conversation state in memory:
+- All conversation state MUST be stored in the database
+- Server MUST be able to restart without losing any conversations
+- Each chat request loads history from database, processes, and persists results
+- No in-memory caches of conversation context
+- Agent instances are ephemeral and recreated per request
+
+**Rationale**: Stateless architecture enables horizontal scaling, fault tolerance,
+and zero-downtime deployments. Server crashes do not lose user data.
+
+### XII. MCP-First Tool Design
+
+AI agent capabilities MUST be exposed as MCP (Model Context Protocol) tools:
+- All task operations implemented as MCP tools
+- Tools are stateless and database-backed
+- Tools receive all necessary context via parameters
+- Tools return structured responses the agent can interpret
+- Minimum 5 MCP tools: add_task, list_tasks, complete_task, delete_task, update_task
+
+**Rationale**: MCP provides a standardized protocol for AI tool integration.
+Tool-based design enables composability and testability.
+
+### XIII. Natural Language Interface
+
+Users MUST be able to interact via conversational commands:
+- AI interprets user intent and maps to appropriate tools
+- No requirement for users to learn command syntax
+- Context-aware responses based on conversation history
+- Graceful fallback when intent is unclear (ask for clarification)
+- Support for multi-step operations via conversation flow
+
+**Rationale**: Natural language reduces cognitive load and makes the application
+accessible to non-technical users.
+
+### XIV. Conversation Persistence
+
+Every message MUST be stored in the database:
+- Both user messages and assistant responses are persisted
+- Messages linked to conversations via conversation_id
+- Conversations linked to users via user_id
+- History is loaded on each request to provide context
+- Conversation metadata includes timestamps for audit trail
+
+**Rationale**: Persistence enables conversation continuity across sessions,
+audit trails, and user experience improvements based on history analysis.
+
 ## Technical Constraints
 
 ### Tech Stack by Phase
@@ -178,6 +230,13 @@ version drift between frontend and backend.
 | III | OpenAI ChatKit | FastAPI + OpenAI Agents SDK | PostgreSQL | Better Auth + JWT | Official MCP SDK |
 | IV | Next.js | FastAPI | PostgreSQL | Better Auth | Docker, Kubernetes, Helm, Minikube |
 | V | Next.js | FastAPI | PostgreSQL | Better Auth | DOKS/GKE/AKS, Kafka, Dapr, CI/CD |
+
+### Phase III Technologies
+
+- **OpenAI Agents SDK**: Core agent framework for processing natural language
+- **OpenAI ChatKit**: React component library for chat UI
+- **Official MCP SDK**: Model Context Protocol for tool definitions
+- **Stateless Architecture**: No session state in application memory
 
 ### Project Structure (Phase II)
 
@@ -208,6 +267,70 @@ All REST API endpoints MUST follow these conventions:
 - All responses in JSON format
 - OpenAPI documentation auto-generated and accessible
 
+### Chat API Standards (Phase III)
+
+The chat endpoint MUST follow this specification:
+
+**Endpoint**: `POST /api/chat`
+
+**Request**:
+```json
+{
+  "conversation_id": "optional-uuid",
+  "message": "user message text"
+}
+```
+
+**Response**:
+```json
+{
+  "conversation_id": "uuid",
+  "response": "assistant message text",
+  "tool_calls": [
+    {
+      "tool": "tool_name",
+      "args": {},
+      "result": {}
+    }
+  ]
+}
+```
+
+**Behavior**:
+- If conversation_id is omitted, create a new conversation
+- If conversation_id is provided, load existing conversation history
+- Response includes all tool calls made during processing
+
+### MCP Tool Requirements (Phase III)
+
+Minimum required MCP tools:
+
+| Tool | Description | Parameters |
+|------|-------------|------------|
+| `add_task` | Create a new task | title, description?, due_date? |
+| `list_tasks` | List tasks with filtering | status?, search?, limit? |
+| `complete_task` | Mark task as completed | task_id |
+| `delete_task` | Soft delete a task | task_id |
+| `update_task` | Modify task properties | task_id, title?, description?, due_date? |
+
+All tools MUST:
+- Be stateless (no memory between calls)
+- Accept user_id from JWT context (not parameters)
+- Return structured JSON responses
+- Handle errors gracefully with descriptive messages
+
+### Stateless Pattern Flow (Phase III)
+
+Every chat request MUST follow this exact sequence:
+
+1. **Receive**: Accept message and optional conversation_id
+2. **Load**: Fetch conversation history from database
+3. **Build**: Construct message array from history + new message
+4. **Execute**: Run agent with tools, capturing all interactions
+5. **Store**: Persist new messages (user + assistant) to database
+6. **Return**: Send response with conversation_id and tool calls
+7. **Reset**: Server holds no memory; ready for next request
+
 ### Database Standards (Phase II+)
 
 All database models MUST include:
@@ -219,6 +342,24 @@ All database models MUST include:
 
 SQLModel is the ONLY allowed ORM. Direct SQL queries are forbidden except for
 migrations.
+
+### Phase III Database Tables
+
+In addition to Phase II tables, Phase III requires:
+
+**conversations**:
+- `id`: UUID primary key
+- `user_id`: Foreign key to users (indexed)
+- `created_at`: Timestamp (UTC)
+- `updated_at`: Timestamp (UTC)
+
+**messages**:
+- `id`: UUID primary key
+- `conversation_id`: Foreign key to conversations (indexed)
+- `role`: Enum ("user", "assistant", "tool")
+- `content`: Text content of message
+- `tool_calls`: JSON array of tool call data (nullable)
+- `created_at`: Timestamp (UTC)
 
 ### Authentication Flow (Phase II+)
 
@@ -250,6 +391,7 @@ The authentication flow MUST follow this sequence:
 - **Testing**: pytest (Python), Jest/Vitest (TypeScript), contract tests for APIs
 - **Logging**: Structured JSON logs with level, timestamp, correlation_id
 - **Soft Deletes**: All data marked `deleted_at` timestamp, never hard deleted
+- **Chat**: Stateless request/response with database-backed history (Phase III)
 
 ### Forbidden Patterns
 
@@ -261,6 +403,8 @@ The authentication flow MUST follow this sequence:
 - **Direct Database Access**: All queries through ORM/repository layer
 - **Implicit State**: No global mutable state; all state explicit and injectable
 - **Trusting Client user_id**: NEVER use user_id from request body; always from JWT
+- **In-Memory Conversation State**: Server MUST NOT cache conversation history in memory (Phase III)
+- **Stateful Agents**: Agent instances MUST NOT persist between requests (Phase III)
 
 ## Code Standards
 
@@ -334,6 +478,88 @@ const TaskList: React.FC<TaskListProps> = ({ tasks }) => {  // PascalCase compon
 // - Easy to mock for testing
 ```
 
+### MCP Tool Pattern (Phase III)
+
+```python
+# All MCP tools MUST follow this pattern
+# Located in backend/tools/
+
+from mcp import Tool, Context
+
+class AddTaskTool(Tool):
+    """MCP tool for creating a new task."""
+
+    name = "add_task"
+    description = "Create a new task for the authenticated user"
+
+    async def execute(
+        self,
+        context: Context,
+        title: str,
+        description: str | None = None,
+        due_date: str | None = None
+    ) -> dict:
+        """Execute the tool.
+
+        Args:
+            context: MCP context containing user_id from JWT
+            title: Task title (required)
+            description: Task description (optional)
+            due_date: Due date in ISO format (optional)
+
+        Returns:
+            Dict with created task data or error message
+        """
+        # user_id from context, NOT from parameters
+        user_id = context.user_id
+
+        # Stateless: all state comes from database
+        task = await task_service.create(
+            user_id=user_id,
+            title=title,
+            description=description,
+            due_date=due_date
+        )
+
+        return {"task": task.model_dump(), "success": True}
+```
+
+### Conversation Model Pattern (Phase III)
+
+```python
+# Conversation and Message models for Phase III
+# Located in backend/models/
+
+from sqlmodel import SQLModel, Field
+from datetime import datetime
+from uuid import UUID, uuid4
+from typing import Optional
+import json
+
+class Conversation(SQLModel, table=True):
+    """Conversation session for a user."""
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    user_id: UUID = Field(index=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class Message(SQLModel, table=True):
+    """Individual message in a conversation."""
+
+    id: UUID = Field(default_factory=uuid4, primary_key=True)
+    conversation_id: UUID = Field(index=True)
+    role: str  # "user", "assistant", "tool"
+    content: str
+    tool_calls: Optional[str] = None  # JSON string
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    def get_tool_calls(self) -> list:
+        """Parse tool_calls JSON."""
+        return json.loads(self.tool_calls) if self.tool_calls else []
+```
+
 ### YAML/Kubernetes (Phase IV-V)
 
 ```yaml
@@ -382,29 +608,33 @@ Definition of Done:
 - [x] Code formatted with ruff
 - [x] README documents installation and usage
 
-### Phase II: Web Application
+### Phase II: Web Application ✅ COMPLETED
 
 Definition of Done (includes Phase I):
-- [ ] REST API with OpenAPI documentation
-- [ ] Next.js frontend with responsive design
-- [ ] User authentication with Better Auth
-- [ ] Multi-user data isolation (users see only their data)
-- [ ] Database migrations versioned and reversible
-- [ ] Integration tests for all API endpoints
-- [ ] Internationalization infrastructure in place
-- [ ] JWT authentication flow working end-to-end
-- [ ] API client pattern implemented in frontend
-- [ ] TypeScript strict mode enabled
+- [x] REST API with OpenAPI documentation
+- [x] Next.js frontend with responsive design
+- [x] User authentication with Better Auth
+- [x] Multi-user data isolation (users see only their data)
+- [x] Database migrations versioned and reversible
+- [x] Integration tests for all API endpoints
+- [x] Internationalization infrastructure in place
+- [x] JWT authentication flow working end-to-end
+- [x] API client pattern implemented in frontend
+- [x] TypeScript strict mode enabled
 
 ### Phase III: AI Chatbot
 
 Definition of Done (includes Phase II):
 - [ ] Natural language task management via chat
 - [ ] OpenAI Agents SDK integration
-- [ ] MCP tools for all CRUD operations
+- [ ] MCP tools for all CRUD operations (minimum 5 tools)
 - [ ] Stateless architecture (no session state in app)
 - [ ] Conversation history persisted to database
+- [ ] Chat API endpoint implemented (`POST /api/chat`)
+- [ ] OpenAI ChatKit UI integration
 - [ ] Fallback to structured UI when AI uncertain
+- [ ] All messages (user + assistant) stored in database
+- [ ] Server restartable without losing conversations
 
 ### Phase IV: Kubernetes Deployment
 
@@ -453,4 +683,4 @@ Definition of Done (includes Phase IV):
 - MINOR: New principles or sections added
 - PATCH: Clarifications, typos, non-semantic refinements
 
-**Version**: 1.1.0 | **Ratified**: 2026-01-01 | **Last Amended**: 2026-01-15
+**Version**: 1.2.0 | **Ratified**: 2026-01-01 | **Last Amended**: 2026-02-05

@@ -1,32 +1,23 @@
-/**
- * Task item component - DoNext Premium.
- *
- * Displays a single task with premium checkbox, hover effects,
- * priority badge, due date, and edit/delete actions.
- */
-
 "use client";
 
 import { useState } from "react";
 import type { Task, TaskPriority } from "@/types";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { Check, Pencil, Trash2, Calendar, Flag } from "lucide-react";
 
 interface TaskItemProps {
   task: Task;
   onToggle: (taskId: number) => Promise<void>;
   onEdit: (task: Task) => void;
-  /** Called when delete button is clicked - parent handles confirmation */
   onDelete: () => void;
 }
 
-/** Priority badge configuration */
-const PRIORITY_CONFIG: Record<TaskPriority, { label: string; className: string }> = {
-  low: { label: "Low", className: "bg-gray-100 text-gray-600" },
-  medium: { label: "Medium", className: "bg-amber-100 text-amber-700" },
-  high: { label: "High", className: "bg-red-100 text-red-700" },
+const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; iconColor: string }> = {
+  low: { label: "Low", color: "bg-slate-100 text-slate-600 dark:bg-slate-700 dark:text-slate-400", iconColor: "text-slate-400" },
+  medium: { label: "Medium", color: "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", iconColor: "text-amber-500" },
+  high: { label: "High", color: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400", iconColor: "text-red-500" },
 };
 
-/** Check if a date is overdue */
 function isOverdue(dateStr: string | null): boolean {
   if (!dateStr) return false;
   const dueDate = new Date(dateStr);
@@ -35,7 +26,6 @@ function isOverdue(dateStr: string | null): boolean {
   return dueDate < today;
 }
 
-/** Format due date for display */
 function formatDueDate(dateStr: string | null): string {
   if (!dateStr) return "";
   const date = new Date(dateStr);
@@ -43,18 +33,15 @@ function formatDueDate(dateStr: string | null): string {
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-
-  if (date.toDateString() === today.toDateString()) {
-    return "Today";
-  }
-  if (date.toDateString() === tomorrow.toDateString()) {
-    return "Tomorrow";
-  }
+  if (date.toDateString() === today.toDateString()) return "Today";
+  if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
   return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
   const [toggling, setToggling] = useState(false);
+  const priorityConfig = PRIORITY_CONFIG[task.priority];
+  const overdue = !task.completed && isOverdue(task.dueDate);
 
   async function handleToggle() {
     setToggling(true);
@@ -65,138 +52,94 @@ export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
     }
   }
 
-  function handleDelete() {
-    // Confirmation is handled by parent component via ConfirmDialog
-    onDelete();
-  }
-
   return (
     <div
-      className={`group flex items-start gap-4 p-5 border-b border-gray-100 last:border-b-0 transition-all duration-200 hover:bg-gray-50 ${
-        task.completed ? "bg-gray-50/50 opacity-75" : ""
-      }`}
+      className={cn(
+        "group relative flex items-start gap-3.5 p-4 rounded-xl border transition-all duration-200",
+        task.completed
+          ? "bg-[var(--surface-secondary)] border-[var(--border)] opacity-70"
+          : "bg-[var(--surface)] border-[var(--border)] hover:border-indigo-300 dark:hover:border-indigo-700 hover:shadow-sm"
+      )}
     >
-      {/* Premium Checkbox */}
+      {/* Checkbox */}
       <button
         onClick={handleToggle}
         disabled={toggling}
-        className={`mt-0.5 w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all duration-200 ${
+        className={cn(
+          "mt-0.5 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200 flex-shrink-0 cursor-pointer",
           task.completed
-            ? "bg-gradient-to-br from-indigo-500 to-purple-600 border-indigo-500 scale-105"
-            : "border-gray-300 hover:border-indigo-500 hover:scale-105"
-        } ${toggling ? "opacity-50" : ""}`}
+            ? "bg-indigo-600 border-indigo-600"
+            : "border-[var(--border-hover)] hover:border-indigo-500",
+          toggling && "opacity-50"
+        )}
         aria-label={task.completed ? "Mark as incomplete" : "Mark as complete"}
       >
-        {task.completed && (
-          <svg
-            className="w-3.5 h-3.5 text-white"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={3}
-              d="M5 13l4 4L19 7"
-            />
-          </svg>
-        )}
+        {task.completed && <Check className="w-3 h-3 text-white" strokeWidth={3} />}
       </button>
 
-      {/* Task content */}
+      {/* Content */}
       <div className="flex-1 min-w-0">
         <h3
-          className={`text-lg font-semibold transition-colors ${
-            task.completed ? "line-through text-gray-400" : "text-gray-900"
-          }`}
+          className={cn(
+            "text-sm font-medium leading-tight",
+            task.completed ? "line-through text-[var(--text-muted)]" : "text-[var(--text-primary)]"
+          )}
         >
           {task.title}
         </h3>
         {task.description && (
           <p
-            className={`mt-1 text-sm line-clamp-2 ${
-              task.completed ? "text-gray-400 line-through" : "text-gray-600"
-            }`}
+            className={cn(
+              "mt-1 text-[13px] line-clamp-2 leading-relaxed",
+              task.completed ? "text-[var(--text-muted)] line-through" : "text-[var(--text-secondary)]"
+            )}
           >
             {task.description}
           </p>
         )}
 
-        {/* Metadata row */}
-        <div className="flex items-center flex-wrap gap-2 mt-3">
-          {/* Status badge */}
-          {task.completed ? (
-            <span className="bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full text-xs font-medium">
-              Completed
-            </span>
-          ) : (
-            <span className="bg-gray-100 text-gray-700 px-2.5 py-0.5 rounded-full text-xs font-medium">
-              Pending
-            </span>
-          )}
-
-          {/* Priority badge */}
-          <span
-            className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${PRIORITY_CONFIG[task.priority].className}`}
-          >
-            {PRIORITY_CONFIG[task.priority].label}
+        {/* Metadata */}
+        <div className="flex items-center flex-wrap gap-2 mt-2.5">
+          {/* Priority */}
+          <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium", priorityConfig.color)}>
+            <Flag className={cn("w-3 h-3", priorityConfig.iconColor)} />
+            {priorityConfig.label}
           </span>
 
-          {/* Due date badge */}
+          {/* Due date */}
           {task.dueDate && (
             <span
-              className={`px-2.5 py-0.5 rounded-full text-xs font-medium flex items-center gap-1 ${
-                !task.completed && isOverdue(task.dueDate)
-                  ? "bg-red-100 text-red-700"
-                  : "bg-indigo-100 text-indigo-700"
-              }`}
+              className={cn(
+                "inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium",
+                overdue
+                  ? "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400"
+                  : "bg-indigo-50 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400"
+              )}
             >
-              <svg
-                className="w-3 h-3"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-                />
-              </svg>
+              <Calendar className="w-3 h-3" />
               {formatDueDate(task.dueDate)}
-              {!task.completed && isOverdue(task.dueDate) && " (Overdue)"}
+              {overdue && " (Overdue)"}
             </span>
           )}
-
-          {/* Created date */}
-          <span className="text-xs text-gray-400">
-            Created {new Date(task.createdAt).toLocaleDateString()}
-          </span>
         </div>
       </div>
 
-      {/* Actions - appear on hover */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Button
-          variant="ghost"
-          size="sm"
+      {/* Actions */}
+      <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
           onClick={() => onEdit(task)}
+          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition-colors"
           aria-label="Edit task"
-          className="text-gray-500 hover:text-indigo-600"
         >
-          Edit
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={handleDelete}
-          className="text-gray-500 hover:text-red-600 hover:bg-red-50"
+          <Pencil className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1.5 rounded-md text-[var(--text-muted)] hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
           aria-label="Delete task"
         >
-          Delete
-        </Button>
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
       </div>
     </div>
   );
