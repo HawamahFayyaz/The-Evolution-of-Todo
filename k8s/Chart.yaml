@@ -1,0 +1,13 @@
+apiVersion: v2
+name: hackathon-todo
+description: A Helm chart for Hackathon Todo App (Next.js frontend + FastAPI backend)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - todo
+  - nextjs
+  - fastapi
+  - ai-chat
+maintainers:
+  - name: hawamah

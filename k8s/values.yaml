@@ -1,0 +1,185 @@
+# =============================================================================
+# HACKATHON TODO - Default Helm Values
+# =============================================================================
+# Merged from basic-web-app (base) + ai-chatbot (chat patterns) blueprints.
+# Override with values-dev.yaml for Minikube local development.
+# =============================================================================
+
+# Override names
+nameOverride: ""
+fullnameOverride: ""
+
+# =============================================================================
+# BACKEND (FastAPI)
+# =============================================================================
+backend:
+  enabled: true
+  name: "todo-backend"
+
+  image:
+    repository: "hackathon-todo-backend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+
+  resources:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+  # Health probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 8000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+
+# =============================================================================
+# FRONTEND (Next.js)
+# =============================================================================
+frontend:
+  enabled: true
+  name: "todo-frontend"
+
+  image:
+    repository: "hackathon-todo-frontend"
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+  replicaCount: 2
+
+  service:
+    type: NodePort
+    port: 3000
+    targetPort: 3000
+    nodePort: 30080
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+  # Health probes
+  livenessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /api/health
+      port: 3000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    readOnlyRootFilesystem: false
+    allowPrivilegeEscalation: false
+
+# =============================================================================
+# CONFIGMAP - Non-sensitive configuration
+# =============================================================================
+config:
+  backend:
+    HOST: "0.0.0.0"
+    PORT: "8000"
+    ALLOWED_ORIGINS: "http://localhost:3000"
+    OPENAI_MODEL: "gpt-4o-mini"
+    OPENAI_MAX_TOKENS: "4096"
+    OPENAI_TEMPERATURE: "0.7"
+    MAX_HISTORY_MESSAGES: "50"
+    RATE_LIMIT_REQUESTS: "10"
+    RATE_LIMIT_WINDOW_SECONDS: "60"
+    SYSTEM_PROMPT: |
+      You are a helpful task management assistant. You can help users create,
+      update, search, and manage their tasks. Be concise and action-oriented.
+
+  frontend:
+    NEXT_PUBLIC_API_URL: "http://todo-backend:8000"
+    NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+
+# =============================================================================
+# SECRETS (provide at install time via --set or values file)
+# =============================================================================
+secrets:
+  DATABASE_URL: ""
+  BETTER_AUTH_SECRET: ""
+  OPENAI_API_KEY: ""
+  OPENAI_BASE_URL: ""
+
+# =============================================================================
+# AUTOSCALING (HPA)
+# =============================================================================
+autoscaling:
+  enabled: false
+
+  backend:
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPU: 70
+    targetMemory: 80
+
+  frontend:
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPU: 70
+
+# =============================================================================
+# INGRESS
+# =============================================================================
+ingress:
+  enabled: false
+  className: nginx
+
+  host: "todo.local"
+
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "120"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/limit-rps: "10"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
+
+  tls:
+    enabled: false
+    secretName: "todo-tls"

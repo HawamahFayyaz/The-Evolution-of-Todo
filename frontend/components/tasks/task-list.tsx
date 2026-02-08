@@ -1,17 +1,51 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { Task } from "@/types";
+import type { Task, TaskPriority } from "@/types";
 import { cn } from "@/lib/utils";
 import { useTasks } from "@/hooks/use-tasks";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TaskItem } from "./task-item";
 import { TaskForm } from "./task-form";
-import { Plus, Search, X, CheckCircle, ClipboardList, RotateCcw } from "lucide-react";
+import { Plus, Search, X, CheckCircle, ClipboardList, RotateCcw, ArrowUpDown, Tag } from "lucide-react";
 
 type FilterType = "all" | "active" | "completed";
+type SortType = "newest" | "oldest" | "due-date" | "priority" | "alphabetical";
+type PriorityFilter = "all" | TaskPriority;
+
+const SORT_OPTIONS: { value: SortType; label: string }[] = [
+  { value: "newest", label: "Newest first" },
+  { value: "oldest", label: "Oldest first" },
+  { value: "due-date", label: "Due date" },
+  { value: "priority", label: "Priority" },
+  { value: "alphabetical", label: "A-Z" },
+];
+
+const PRIORITY_RANK: Record<TaskPriority, number> = { high: 0, medium: 1, low: 2 };
+
+function sortTasks(tasks: Task[], sortBy: SortType): Task[] {
+  return [...tasks].sort((a, b) => {
+    switch (sortBy) {
+      case "oldest":
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case "due-date": {
+        if (!a.dueDate && !b.dueDate) return 0;
+        if (!a.dueDate) return 1;
+        if (!b.dueDate) return -1;
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      }
+      case "priority":
+        return PRIORITY_RANK[a.priority] - PRIORITY_RANK[b.priority];
+      case "alphabetical":
+        return a.title.localeCompare(b.title);
+      case "newest":
+      default:
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    }
+  });
+}
 
 function TaskSkeleton() {
   return (
@@ -39,6 +73,9 @@ export function TaskList() {
       ? filterParam
       : "all"
   );
+  const [sortBy, setSortBy] = useState<SortType>("newest");
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
+  const [tagFilter, setTagFilter] = useState<string>("all");
 
   const {
     tasks,
@@ -142,11 +179,29 @@ export function TaskList() {
     }
   }
 
-  const filteredTasks = tasks.filter((t) => {
-    if (filter === "active") return !t.completed;
-    if (filter === "completed") return t.completed;
-    return true;
-  });
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    tasks.forEach(t => (t.tags ?? []).forEach(tag => tagSet.add(tag)));
+    return Array.from(tagSet).sort();
+  }, [tasks]);
+
+  const filteredTasks = useMemo(() => {
+    let result = tasks.filter((t) => {
+      if (filter === "active") return !t.completed;
+      if (filter === "completed") return t.completed;
+      return true;
+    });
+
+    if (priorityFilter !== "all") {
+      result = result.filter((t) => t.priority === priorityFilter);
+    }
+
+    if (tagFilter !== "all") {
+      result = result.filter((t) => (t.tags ?? []).includes(tagFilter));
+    }
+
+    return sortTasks(result, sortBy);
+  }, [tasks, filter, priorityFilter, tagFilter, sortBy]);
 
   const incompleteTasks = filteredTasks.filter((t) => !t.completed);
   const completedTasks = filteredTasks.filter((t) => t.completed);
@@ -155,6 +210,13 @@ export function TaskList() {
     { value: "all", label: "All", count: tasks.length },
     { value: "active", label: "Active", count: tasks.filter((t) => !t.completed).length },
     { value: "completed", label: "Done", count: tasks.filter((t) => t.completed).length },
+  ];
+
+  const priorityTabs: { value: PriorityFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "high", label: "High" },
+    { value: "medium", label: "Medium" },
+    { value: "low", label: "Low" },
   ];
 
   return (
@@ -180,24 +242,40 @@ export function TaskList() {
       {/* Search + Filters */}
       {(tasks.length > 0 || isSearching) && (
         <div className="space-y-3">
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search tasks..."
-              value={searchQuery}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full pl-9 pr-9 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
-            />
-            {searchQuery && (
-              <button
-                onClick={handleClearSearch}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+          {/* Search + Sort row */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[var(--text-muted)] pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search tasks..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="w-full pl-9 pr-9 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
+              />
+              {searchQuery && (
+                <button
+                  onClick={handleClearSearch}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+
+            {/* Sort dropdown */}
+            <div className="relative">
+              <ArrowUpDown className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-[var(--text-muted)] pointer-events-none" />
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as SortType)}
+                className="pl-8 pr-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow appearance-none cursor-pointer"
               >
-                <X className="w-4 h-4" />
-              </button>
-            )}
+                {SORT_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Filter Tabs */}
@@ -227,6 +305,45 @@ export function TaskList() {
                   </span>
                 </button>
               ))}
+            </div>
+          )}
+
+          {/* Priority filter pills + Tag filter */}
+          {!isSearching && (
+            <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[11px] font-medium text-[var(--text-muted)] uppercase tracking-wider mr-1">Priority:</span>
+                {priorityTabs.map((tab) => (
+                  <button
+                    key={tab.value}
+                    onClick={() => setPriorityFilter(tab.value)}
+                    className={cn(
+                      "px-2.5 py-1 text-[11px] font-medium rounded-lg transition-all cursor-pointer",
+                      priorityFilter === tab.value
+                        ? "bg-indigo-600 text-white shadow-sm"
+                        : "bg-[var(--surface-secondary)] text-[var(--text-muted)] hover:text-[var(--text-secondary)]"
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              {allTags.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  <Tag className="w-3 h-3 text-[var(--text-muted)]" />
+                  <select
+                    value={tagFilter}
+                    onChange={(e) => setTagFilter(e.target.value)}
+                    className="px-2 py-1 text-[11px] font-medium rounded-lg bg-[var(--surface-secondary)] text-[var(--text-muted)] border-none focus:outline-none focus:ring-1 focus:ring-indigo-500/30 cursor-pointer"
+                  >
+                    <option value="all">All tags</option>
+                    {allTags.map(tag => (
+                      <option key={tag} value={tag}>{tag}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -280,7 +397,7 @@ export function TaskList() {
       {/* Task list */}
       {!loading && filteredTasks.length > 0 && (
         <div className="space-y-6">
-          {filter === "all" ? (
+          {filter === "all" && sortBy === "newest" ? (
             <>
               {incompleteTasks.length > 0 && (
                 <div className="space-y-2">

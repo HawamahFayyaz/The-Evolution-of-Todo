@@ -1,0 +1,34 @@
+# docker-compose.yaml
+# Local multi-container development (alternative to Minikube)
+# Usage: docker compose up
+# Note: Uses Neon managed PostgreSQL — no local DB container needed
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: todo-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./backend/.env
+    environment:
+      HOST: "0.0.0.0"
+      PORT: "8000"
+      ALLOWED_ORIGINS: "http://localhost:3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: todo-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      HOSTNAME: "0.0.0.0"
+      PORT: "3000"
+      NEXT_PUBLIC_API_URL: "http://localhost:8000"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3000"
+    depends_on:
+      - backend

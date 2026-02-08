@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import type { Task, TaskPriority } from "@/types";
+import type { Task, TaskPriority, RecurrencePattern } from "@/types";
 import { Button } from "@/components/ui/button";
+import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 
 interface TaskFormData {
@@ -10,12 +12,21 @@ interface TaskFormData {
   description: string;
   priority: TaskPriority;
   due_date: string | null;
+  tags: string[];
+  recurrence_pattern: RecurrencePattern;
 }
 
 const PRIORITY_OPTIONS: { value: TaskPriority; label: string; color: string }[] = [
   { value: "low", label: "Low", color: "text-slate-500" },
   { value: "medium", label: "Medium", color: "text-amber-600" },
   { value: "high", label: "High", color: "text-red-600" },
+];
+
+const RECURRENCE_OPTIONS: { value: RecurrencePattern; label: string }[] = [
+  { value: "none", label: "No repeat" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
 ];
 
 interface TaskFormProps {
@@ -25,24 +36,75 @@ interface TaskFormProps {
   loading?: boolean;
 }
 
-function toDateInputValue(datetime: string | null): string {
+function toDateTimeInputValue(datetime: string | null): string {
   if (!datetime) return "";
-  try { return datetime.split("T")[0]; } catch { return ""; }
+  try {
+    const d = new Date(datetime);
+    // Format as YYYY-MM-DDTHH:MM for datetime-local input
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  } catch {
+    return "";
+  }
 }
 
-function toISODateTime(dateValue: string): string | null {
-  if (!dateValue) return null;
-  return `${dateValue}T23:59:59Z`;
+function toISODateTime(dateTimeValue: string): string | null {
+  if (!dateTimeValue) return null;
+  // datetime-local gives us YYYY-MM-DDTHH:MM
+  return new Date(dateTimeValue).toISOString();
+}
+
+const TAG_COLORS = [
+  "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
+  "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+];
+
+function getTagColor(tag: string): string {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
 }
 
 export function TaskForm({ task, onSubmit, onCancel, loading }: TaskFormProps) {
   const [title, setTitle] = useState(task?.title ?? "");
   const [description, setDescription] = useState(task?.description ?? "");
   const [priority, setPriority] = useState<TaskPriority>(task?.priority ?? "medium");
-  const [dueDate, setDueDate] = useState(toDateInputValue(task?.dueDate ?? null));
+  const [dueDate, setDueDate] = useState(toDateTimeInputValue(task?.dueDate ?? null));
+  const [tags, setTags] = useState<string[]>(task?.tags ?? []);
+  const [tagInput, setTagInput] = useState("");
+  const [recurrence, setRecurrence] = useState<RecurrencePattern>(task?.recurrencePattern ?? "none");
   const [error, setError] = useState<string | null>(null);
 
   const isEditing = !!task;
+
+  function handleAddTag(value: string) {
+    const tag = value.trim().toLowerCase();
+    if (tag && !tags.includes(tag) && tags.length < 10) {
+      setTags([...tags, tag]);
+    }
+    setTagInput("");
+  }
+
+  function handleRemoveTag(tag: string) {
+    setTags(tags.filter(t => t !== tag));
+  }
+
+  function handleTagKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleAddTag(tagInput);
+    } else if (e.key === "Backspace" && !tagInput && tags.length > 0) {
+      setTags(tags.slice(0, -1));
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -64,12 +126,17 @@ export function TaskForm({ task, onSubmit, onCancel, loading }: TaskFormProps) {
         description: description.trim(),
         priority,
         due_date: toISODateTime(dueDate),
+        tags,
+        recurrence_pattern: recurrence,
       });
       if (!isEditing) {
         setTitle("");
         setDescription("");
         setPriority("medium");
         setDueDate("");
+        setTags([]);
+        setTagInput("");
+        setRecurrence("none");
       }
     } catch {
       setError("Failed to save task. Please try again.");
@@ -132,11 +199,58 @@ export function TaskForm({ task, onSubmit, onCancel, loading }: TaskFormProps) {
             Due Date <span className="text-[var(--text-muted)] font-normal">(optional)</span>
           </label>
           <input
-            type="date"
+            type="datetime-local"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
             className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
-            min={new Date().toISOString().split("T")[0]}
+          />
+        </div>
+      </div>
+
+      {/* Recurrence */}
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-[var(--text-secondary)]">Repeat</label>
+        <select
+          value={recurrence}
+          onChange={(e) => setRecurrence(e.target.value as RecurrencePattern)}
+          className="w-full px-3 py-2.5 text-sm border border-[var(--border)] rounded-xl bg-[var(--surface)] text-[var(--text-primary)] focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-shadow"
+        >
+          {RECURRENCE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* Tags */}
+      <div className="space-y-1.5">
+        <label className="block text-sm font-medium text-[var(--text-secondary)]">
+          Tags <span className="text-[var(--text-muted)] font-normal">(optional, press Enter to add)</span>
+        </label>
+        <div className="flex flex-wrap gap-1.5 min-h-[40px] px-3 py-2 border border-[var(--border)] rounded-xl bg-[var(--surface)] focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-400 transition-shadow">
+          {tags.map(tag => (
+            <span
+              key={tag}
+              className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium", getTagColor(tag))}
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={() => handleRemoveTag(tag)}
+                className="hover:opacity-70"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </span>
+          ))}
+          <input
+            value={tagInput}
+            onChange={(e) => setTagInput(e.target.value)}
+            onKeyDown={handleTagKeyDown}
+            onBlur={() => { if (tagInput.trim()) handleAddTag(tagInput); }}
+            placeholder={tags.length === 0 ? "Type a tag..." : ""}
+            className="flex-1 min-w-[80px] text-sm bg-transparent text-[var(--text-primary)] placeholder:text-[var(--text-muted)] outline-none"
           />
         </div>
       </div>

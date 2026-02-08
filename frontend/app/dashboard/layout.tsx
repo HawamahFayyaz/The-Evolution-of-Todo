@@ -10,6 +10,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { FloatingChat } from "@/components/chat/floating-chat";
 import { CommandPaletteWrapper } from "@/components/command-palette-wrapper";
+import { RemindersProvider } from "@/components/reminders-provider";
 
 async function getSessionWithRetry(maxRetries = 2) {
   const reqHeaders = await headers();
@@ -62,6 +63,9 @@ export default async function DashboardLayout({
 
       {/* Command palette - accessible via Cmd+K */}
       <CommandPaletteWrapper />
+
+      {/* Browser notification reminders */}
+      <RemindersProvider />
     </div>
   );
 }

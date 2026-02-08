@@ -2,26 +2,31 @@
 ============================================================================
 SYNC IMPACT REPORT
 ============================================================================
-Version Change: 1.1.0 → 1.2.0 (MINOR - Phase III additions)
+Version Change: 1.2.0 → 1.3.0 (MINOR - Phase IV additions)
 
-Modified Principles: None (all existing principles preserved)
+Modified Principles:
+- Phase III status updated: "← CURRENT" → "✅ COMPLETED"
+- Phase IV status updated: (none) → "← CURRENT"
 
 Added Sections:
-- Phase III Principles (4 new principles: XI-XIV)
-- Phase III Technologies (under Tech Stack)
-- Phase III Database Tables (conversations, messages)
-- Chat API Standards (under Technical Constraints)
-- MCP Tool Requirements (under Technical Constraints)
-- Stateless Pattern Flow (under Technical Constraints)
-- Code Standards: MCP Tool Pattern (Phase III addition)
-- Code Standards: Conversation Model Pattern (Phase III addition)
+- Phase IV Principles (3 new principles: XV-XVII)
+- Phase IV Technologies (under Tech Stack)
+- Phase IV Project Structure (k8s/ and docker/ directories)
+- Blueprint Usage Standards (under Technical Constraints)
+- Containerization Standards (under Technical Constraints)
+- Kubernetes Resource Requirements (under Technical Constraints)
+- Helm Chart Standards (under Technical Constraints)
+- AIOps Tools (under Technical Constraints)
+- Code Standards: Dockerfile Pattern (Phase IV addition)
+- Code Standards: Helm Values Pattern (Phase IV addition)
+- Forbidden Patterns: 3 new Phase IV entries
 
 Removed Sections: None
 
 Templates Requiring Updates:
-- .specify/templates/plan-template.md: ✅ Compatible (Constitution Check section exists)
+- .specify/templates/plan-template.md: ✅ Compatible (Constitution Check exists)
 - .specify/templates/spec-template.md: ✅ Compatible (Requirements section aligns)
-- .specify/templates/tasks-template.md: ✅ Compatible (Phase structure supports user stories)
+- .specify/templates/tasks-template.md: ✅ Compatible (Phase structure supports K8s tasks)
 
 Follow-up TODOs: None
 ============================================================================
@@ -43,8 +48,8 @@ existing functionality.
 **Phases**:
 - Phase I: Console CLI application (Python, in-memory storage) ✅ COMPLETED
 - Phase II: Full-stack web application (Next.js + FastAPI + PostgreSQL) ✅ COMPLETED
-- Phase III: AI-powered chatbot interface (OpenAI Agents SDK + MCP) ← CURRENT
-- Phase IV: Containerized Kubernetes deployment (Docker + Helm + Minikube)
+- Phase III: AI-powered chatbot interface (OpenAI Agents SDK + MCP) ✅ COMPLETED
+- Phase IV: Containerized Kubernetes deployment (Docker + Helm + Minikube) ← CURRENT
 - Phase V: Cloud-native production system (Kafka + Dapr + CI/CD)
 
 ## Core Principles
@@ -219,6 +224,45 @@ Every message MUST be stored in the database:
 **Rationale**: Persistence enables conversation continuity across sessions,
 audit trails, and user experience improvements based on history analysis.
 
+## Phase IV Principles
+
+### XV. Container-First Architecture
+
+Every service MUST run in a container with no host-level dependencies:
+- Frontend and backend each have their own multi-stage Dockerfile
+- Containers are self-contained: all dependencies bundled at build time
+- No local toolchain required beyond Docker to build and run
+- Images MUST be optimized: multi-stage builds, minimal base images
+- Dev and prod configurations MUST be separate (build args or targets)
+
+**Rationale**: Containers eliminate "works on my machine" problems, ensure
+reproducible builds, and are a prerequisite for Kubernetes orchestration.
+
+### XVI. Declarative Infrastructure
+
+All infrastructure MUST be defined in version-controlled YAML manifests:
+- Kubernetes resources described declaratively (Deployments, Services, etc.)
+- Helm charts parameterize environment-specific values
+- No manual `kubectl` imperative commands for production state changes
+- Infrastructure changes go through the same spec-driven workflow as code
+- Blueprints from `.claude/blueprints/` MUST be used as starting templates
+
+**Rationale**: Declarative infrastructure is auditable, reproducible, and
+enables GitOps workflows. Manual changes create drift and are unreproducible.
+
+### XVII. Cloud-Native Twelve-Factor Compliance
+
+All services MUST follow twelve-factor app principles for Kubernetes:
+- Configuration via environment variables injected by ConfigMaps and Secrets
+- Stateless processes: no local filesystem state between requests
+- Port binding: services expose themselves via declared container ports
+- Disposability: fast startup, graceful shutdown via SIGTERM handling
+- Dev/prod parity: same container image across all environments
+- Logs as streams: write to stdout/stderr, collected by cluster logging
+
+**Rationale**: Twelve-factor compliance ensures applications are portable across
+orchestrators and cloud providers without code changes.
+
 ## Technical Constraints
 
 ### Tech Stack by Phase
@@ -228,7 +272,7 @@ audit trails, and user experience improvements based on history analysis.
 | I | - | Python 3.13+ | In-memory | - | UV package manager |
 | II | Next.js 16+ App Router | FastAPI | Neon PostgreSQL | Better Auth | SQLModel ORM, Vercel |
 | III | OpenAI ChatKit | FastAPI + OpenAI Agents SDK | PostgreSQL | Better Auth + JWT | Official MCP SDK |
-| IV | Next.js | FastAPI | PostgreSQL | Better Auth | Docker, Kubernetes, Helm, Minikube |
+| IV | Next.js (containerized) | FastAPI (containerized) | Neon PostgreSQL (managed) | Better Auth | Docker, Minikube, Helm, kubectl-ai, Gordon |
 | V | Next.js | FastAPI | PostgreSQL | Better Auth | DOKS/GKE/AKS, Kafka, Dapr, CI/CD |
 
 ### Phase III Technologies
@@ -237,6 +281,29 @@ audit trails, and user experience improvements based on history analysis.
 - **OpenAI ChatKit**: React component library for chat UI
 - **Official MCP SDK**: Model Context Protocol for tool definitions
 - **Stateless Architecture**: No session state in application memory
+
+### Phase IV Technologies
+
+- **Docker**: Container runtime and image builder for frontend and backend
+- **Docker Desktop + Gordon**: AI-assisted Docker operations
+- **Minikube**: Local single-node Kubernetes cluster for development
+- **Helm**: Kubernetes package manager for templated deployments
+- **kubectl-ai / kagent**: AI-powered Kubernetes operations assistants
+- **NGINX Ingress Controller**: HTTP routing and TLS termination
+
+### Phase IV Blueprint Usage
+
+Blueprints from `.claude/blueprints/` MUST be used as starting templates:
+
+| Blueprint | Use For | Skip |
+|-----------|---------|------|
+| `basic-web-app` | Base K8s configs: Deployment, Service, Ingress, HPA, ConfigMap, Secret | - |
+| `ai-chatbot` | Chat-specific patterns: 120s LLM timeouts, system prompt ConfigMap, rate limiting | MCP Server deployment, PostgreSQL StatefulSet, WebSocket routes |
+
+**What to skip and why**:
+- **MCP Server deployment**: Tools run in-process via `@function_tool`, not as a separate service
+- **PostgreSQL StatefulSet**: We use Neon serverless PostgreSQL (managed, external)
+- **WebSocket routes**: Chat uses REST `POST /api/chat`, not WebSocket streaming
 
 ### Project Structure (Phase II)
 
@@ -255,6 +322,28 @@ hackathon-todo/
 ├── specs/                 # Feature specifications
 ├── CLAUDE.md              # Root project context
 └── README.md              # Project documentation
+```
+
+### Project Structure (Phase IV additions)
+
+```
+hackathon-todo/
+├── frontend/
+│   └── Dockerfile         # Multi-stage build (deps → build → runtime)
+├── backend/
+│   └── Dockerfile         # Multi-stage build (deps → runtime)
+├── k8s/                   # Kubernetes manifests (from blueprints)
+│   ├── Chart.yaml         # Helm chart metadata
+│   ├── values.yaml        # Environment configuration
+│   ├── values-dev.yaml    # Minikube overrides
+│   └── templates/         # Templated K8s resources
+│       ├── deployment.yaml
+│       ├── service.yaml
+│       ├── ingress.yaml
+│       ├── hpa.yaml
+│       ├── configmap.yaml
+│       └── secret.yaml
+└── docker-compose.yaml    # Local multi-container dev (optional)
 ```
 
 ### API Standards (Phase II+)
@@ -331,6 +420,91 @@ Every chat request MUST follow this exact sequence:
 6. **Return**: Send response with conversation_id and tool calls
 7. **Reset**: Server holds no memory; ready for next request
 
+### Containerization Standards (Phase IV)
+
+All Dockerfiles MUST follow these requirements:
+
+**Frontend (Next.js)**:
+- Multi-stage build: `deps` → `build` → `runner`
+- Base image: `node:20-alpine` (matches project Node version)
+- Non-root user execution (`nextjs` user, UID 1001)
+- Standalone output mode (`output: 'standalone'` in next.config)
+- Only production dependencies in final image
+- Health check: `HEALTHCHECK CMD curl -f http://localhost:3000/api/health`
+
+**Backend (FastAPI)**:
+- Multi-stage build: `deps` → `runtime`
+- Base image: `python:3.13-slim` (matches project Python version)
+- Non-root user execution (UID 1000)
+- UV for dependency installation (matches project tooling)
+- Health check: `HEALTHCHECK CMD curl -f http://localhost:8000/health`
+
+**Both**:
+- `.dockerignore` MUST exclude: `.git`, `node_modules`, `__pycache__`, `.env`
+- No secrets baked into images (use runtime environment variables)
+- Labels for metadata: `org.opencontainers.image.*`
+
+### Kubernetes Resource Requirements (Phase IV)
+
+All deployments MUST include these resources:
+
+| Resource | Frontend | Backend |
+|----------|----------|---------|
+| Deployment | 2 replicas | 3 replicas |
+| Service | NodePort (Minikube) | ClusterIP |
+| ConfigMap | NEXT_PUBLIC_* vars | ENVIRONMENT, CORS, model config, system prompt |
+| Secret | - | DATABASE_URL, OPENAI_API_KEY, OPENAI_API_BASE, AUTH_SECRET |
+| HPA | 2-10 replicas, CPU 70% | 2-10 replicas, CPU 70%, Memory 80% |
+| Ingress | `/` catch-all | `/api/*` with 120s proxy timeout |
+
+**Health endpoints MUST be implemented**:
+- Backend: `GET /health` returns `{"status": "ok"}` (liveness + readiness)
+- Frontend: `GET /api/health` returns `{"status": "ok"}` via Next.js API route
+
+**Ingress MUST configure LLM-specific timeouts**:
+- `proxy-read-timeout: "120"` (LLM responses can take 30+ seconds)
+- `proxy-send-timeout: "120"`
+- `proxy-body-size: "10m"` (long conversation payloads)
+
+### Helm Chart Standards (Phase IV)
+
+Helm charts MUST follow this structure:
+
+```
+k8s/
+├── Chart.yaml              # name, version, appVersion, description
+├── values.yaml             # Default configuration (production)
+├── values-dev.yaml         # Minikube overrides (NodePort, no HPA, 1 replica)
+└── templates/
+    ├── _helpers.tpl         # Template helpers (labels, names)
+    ├── deployment.yaml      # Frontend + Backend deployments
+    ├── service.yaml         # Frontend (NodePort) + Backend (ClusterIP)
+    ├── configmap.yaml       # Non-sensitive configuration
+    ├── secret.yaml          # Sensitive data (template only)
+    ├── ingress.yaml         # HTTP routing with TLS
+    └── hpa.yaml             # Autoscaling rules
+```
+
+**values.yaml customization requirements**:
+- Image repositories MUST point to actual container registry
+- Neon DB connection string in secrets (not local PostgreSQL)
+- OpenRouter API base URL configured via OPENAI_API_BASE
+- Frontend service type: NodePort for Minikube, LoadBalancer for cloud
+- Ingress host: configurable per environment
+
+### AIOps Tools (Phase IV)
+
+AI-powered DevOps tools MAY be used to accelerate Kubernetes operations:
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| **Gordon** (Docker AI) | Container build and debugging | `docker ai 'build and run frontend container'` |
+| **kubectl-ai** | Natural language K8s commands | `kubectl-ai 'deploy todo app with 2 replicas'` |
+| **kagent** | Cluster health and diagnostics | `kagent 'check cluster health'` |
+
+These tools are assistive and MUST NOT replace declarative manifests. All
+AIOps-generated changes MUST be captured in version-controlled YAML files.
+
 ### Database Standards (Phase II+)
 
 All database models MUST include:
@@ -382,6 +556,15 @@ The authentication flow MUST follow this sequence:
 - BETTER_AUTH_SECRET MUST be at least 32 characters
 - Production secrets managed via environment variables or secret manager
 
+### Security Requirements (Phase IV additions)
+
+- Container images MUST run as non-root user (securityContext.runAsNonRoot)
+- Secrets MUST use Kubernetes Secret resources, NEVER inline in manifests
+- `.dockerignore` MUST exclude `.env` files and credentials
+- No secrets baked into Docker images at build time
+- Resource limits MUST be set on all containers (prevent noisy neighbor)
+- Network exposure MUST be minimal (ClusterIP default, LoadBalancer only where needed)
+
 ### Allowed Patterns
 
 - **Data Models**: Dataclasses (Phase I), Pydantic/SQLModel (Phase II+)
@@ -392,6 +575,9 @@ The authentication flow MUST follow this sequence:
 - **Logging**: Structured JSON logs with level, timestamp, correlation_id
 - **Soft Deletes**: All data marked `deleted_at` timestamp, never hard deleted
 - **Chat**: Stateless request/response with database-backed history (Phase III)
+- **Containers**: Multi-stage Docker builds with non-root execution (Phase IV)
+- **Infrastructure**: Helm-templated K8s manifests from blueprint base (Phase IV)
+- **Configuration**: Environment variables via ConfigMap/Secret injection (Phase IV)
 
 ### Forbidden Patterns
 
@@ -405,6 +591,9 @@ The authentication flow MUST follow this sequence:
 - **Trusting Client user_id**: NEVER use user_id from request body; always from JWT
 - **In-Memory Conversation State**: Server MUST NOT cache conversation history in memory (Phase III)
 - **Stateful Agents**: Agent instances MUST NOT persist between requests (Phase III)
+- **Secrets in Images**: Docker images MUST NOT contain baked-in secrets or `.env` files (Phase IV)
+- **Root Containers**: Containers MUST NOT run as root user (Phase IV)
+- **Imperative Infrastructure**: No manual `kubectl create/edit` for production state; all changes via declarative YAML (Phase IV)
 
 ## Code Standards
 
@@ -560,6 +749,101 @@ class Message(SQLModel, table=True):
         return json.loads(self.tool_calls) if self.tool_calls else []
 ```
 
+### Dockerfile Pattern (Phase IV)
+
+```dockerfile
+# Backend Dockerfile MUST follow this multi-stage pattern
+# Located in backend/Dockerfile
+
+# Stage 1: Install dependencies
+FROM python:3.13-slim AS deps
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: Runtime
+FROM python:3.13-slim AS runtime
+WORKDIR /app
+RUN adduser --disabled-password --uid 1000 appuser
+COPY --from=deps /usr/local/lib/python3.13/site-packages \
+     /usr/local/lib/python3.13/site-packages
+COPY . .
+USER appuser
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+```dockerfile
+# Frontend Dockerfile MUST follow this multi-stage pattern
+# Located in frontend/Dockerfile
+
+# Stage 1: Install dependencies
+FROM node:20-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --production=false
+
+# Stage 2: Build
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+# Stage 3: Runtime
+FROM node:20-alpine AS runner
+WORKDIR /app
+RUN adduser --disabled-password --uid 1001 nextjs
+COPY --from=build /app/.next/standalone ./
+COPY --from=build /app/.next/static ./.next/static
+COPY --from=build /app/public ./public
+USER nextjs
+EXPOSE 3000
+CMD ["node", "server.js"]
+```
+
+### Helm Values Pattern (Phase IV)
+
+```yaml
+# values.yaml MUST follow this structure
+# Located in k8s/values.yaml
+
+app:
+  name: "hackathon-todo"
+  namespace: "default"
+  environment: "production"
+
+backend:
+  image:
+    repository: "hackathon-todo-backend"  # Local Minikube image
+    tag: "latest"
+  replicas: 3
+  port:
+    container: 8000
+    service: 8000
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits: { cpu: "500m", memory: "512Mi" }
+  healthCheck:
+    path: "/health"
+
+frontend:
+  image:
+    repository: "hackathon-todo-frontend"
+    tag: "latest"
+  replicas: 2
+  port:
+    container: 3000
+    service: 80
+
+# Secrets reference Neon managed DB (NOT local PostgreSQL)
+secrets:
+  DATABASE_URL: "postgresql://...@...neon.tech/..."
+  OPENAI_API_KEY: "sk-..."
+  OPENAI_API_BASE: "https://openrouter.ai/api/v1"
+  AUTH_SECRET: "min-32-char-secret"
+```
+
 ### YAML/Kubernetes (Phase IV-V)
 
 ```yaml
@@ -622,30 +906,37 @@ Definition of Done (includes Phase I):
 - [x] API client pattern implemented in frontend
 - [x] TypeScript strict mode enabled
 
-### Phase III: AI Chatbot
+### Phase III: AI Chatbot ✅ COMPLETED
 
 Definition of Done (includes Phase II):
-- [ ] Natural language task management via chat
-- [ ] OpenAI Agents SDK integration
-- [ ] MCP tools for all CRUD operations (minimum 5 tools)
-- [ ] Stateless architecture (no session state in app)
-- [ ] Conversation history persisted to database
-- [ ] Chat API endpoint implemented (`POST /api/chat`)
-- [ ] OpenAI ChatKit UI integration
-- [ ] Fallback to structured UI when AI uncertain
-- [ ] All messages (user + assistant) stored in database
-- [ ] Server restartable without losing conversations
+- [x] Natural language task management via chat
+- [x] OpenAI Agents SDK integration
+- [x] MCP tools for all CRUD operations (minimum 5 tools)
+- [x] Stateless architecture (no session state in app)
+- [x] Conversation history persisted to database
+- [x] Chat API endpoint implemented (`POST /api/chat`)
+- [x] OpenAI ChatKit UI integration
+- [x] Fallback to structured UI when AI uncertain
+- [x] All messages (user + assistant) stored in database
+- [x] Server restartable without losing conversations
 
 ### Phase IV: Kubernetes Deployment
 
 Definition of Done (includes Phase III):
 - [ ] Multi-stage Dockerfiles for frontend and backend
-- [ ] Helm charts for all components
-- [ ] Successful deployment to Minikube
-- [ ] Health checks passing for all pods
-- [ ] Resource limits set appropriately
-- [ ] Secrets managed via Kubernetes secrets
-- [ ] Horizontal Pod Autoscaler configured
+- [ ] Docker images build successfully and run locally
+- [ ] Health check endpoints implemented (`/health`, `/api/health`)
+- [ ] Helm chart created with parameterized values
+- [ ] Successful deployment to Minikube cluster
+- [ ] All pods healthy (liveness + readiness probes passing)
+- [ ] Resource limits set on all containers
+- [ ] Secrets managed via Kubernetes Secret resources
+- [ ] ConfigMaps for non-sensitive configuration (system prompt, CORS, model config)
+- [ ] Services expose frontend (NodePort) and backend (ClusterIP)
+- [ ] Ingress routes `/api/*` to backend with 120s LLM timeouts
+- [ ] HPA configured for autoscaling (2-10 replicas, CPU 70%)
+- [ ] Containers run as non-root user
+- [ ] Application functional end-to-end in Kubernetes
 
 ### Phase V: Cloud-Native Production
 
@@ -683,4 +974,4 @@ Definition of Done (includes Phase IV):
 - MINOR: New principles or sections added
 - PATCH: Clarifications, typos, non-semantic refinements
 
-**Version**: 1.2.0 | **Ratified**: 2026-01-01 | **Last Amended**: 2026-02-05
+**Version**: 1.3.0 | **Ratified**: 2026-01-01 | **Last Amended**: 2026-02-08

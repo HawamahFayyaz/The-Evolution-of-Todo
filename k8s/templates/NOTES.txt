@@ -1,0 +1,37 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+{{- if .Values.ingress.enabled }}
+
+Access your application at:
+  https://{{ .Values.ingress.host }}
+
+{{- else if eq .Values.frontend.service.type "NodePort" }}
+
+Get the application URL by running:
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ .Values.frontend.name }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo "Frontend: http://$NODE_IP:$NODE_PORT"
+
+For Minikube:
+  minikube service {{ .Values.frontend.name }} --namespace {{ .Release.Namespace }} --url
+
+{{- else }}
+
+Get the application URL by running:
+  kubectl get svc --namespace {{ .Release.Namespace }} {{ .Values.frontend.name }}
+
+{{- end }}
+
+Monitor deployment:
+  kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ .Values.backend.name }}"
+  kubectl get pods --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ .Values.frontend.name }}"
+
+View logs:
+  kubectl logs --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ .Values.backend.name }}" -f
+  kubectl logs --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ .Values.frontend.name }}" -f
+
+Health checks:
+  kubectl exec -it $(kubectl get pod -l "app.kubernetes.io/name={{ .Values.backend.name }}" -o name | head -1) -- curl -s localhost:8000/health
+  kubectl exec -it $(kubectl get pod -l "app.kubernetes.io/name={{ .Values.frontend.name }}" -o name | head -1) -- node -e "require('http').get('http://localhost:3000/api/health', r => { let d=''; r.on('data',c=>d+=c); r.on('end',()=>console.log(d)); })"

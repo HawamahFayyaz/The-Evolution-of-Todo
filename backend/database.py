@@ -3,11 +3,25 @@
 from collections.abc import Generator
 from contextlib import contextmanager
 from functools import lru_cache
+from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
 from config import get_settings
+
+
+def _sanitize_db_url(url: str) -> str:
+    """Strip unsupported query params (e.g. channel_binding) from DATABASE_URL.
+
+    Neon includes channel_binding=require which psycopg2+libpq in Docker
+    may not support. Remove it to prevent startup failures.
+    """
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query)
+    params.pop("channel_binding", None)
+    clean_query = urlencode(params, doseq=True)
+    return urlunparse(parsed._replace(query=clean_query))
 
 
 @lru_cache
@@ -34,8 +48,9 @@ def get_engine():
         )
 
     # Production mode: PostgreSQL with Neon-optimized settings
+    db_url = _sanitize_db_url(settings.database_url)
     return create_engine(
-        settings.database_url,
+        db_url,
         echo=False,
         pool_pre_ping=True,  # Validates connections (handles cold starts)
         pool_recycle=300,  # Recycle connections after 5 minutes

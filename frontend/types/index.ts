@@ -8,6 +8,11 @@
 export type TaskPriority = "low" | "medium" | "high";
 
 /**
+ * Task recurrence patterns.
+ */
+export type RecurrencePattern = "none" | "daily" | "weekly" | "monthly";
+
+/**
  * Task entity representing a user's to-do item.
  * Matches backend TaskResponse schema.
  */
@@ -19,6 +24,8 @@ export interface Task {
   completed: boolean;
   priority: TaskPriority;
   dueDate: string | null; // ISO 8601 datetime or null
+  tags: string[];
+  recurrencePattern: RecurrencePattern;
   createdAt: string; // ISO 8601 datetime
   updatedAt: string; // ISO 8601 datetime
 }
@@ -32,6 +39,8 @@ export interface CreateTaskData {
   description?: string;
   priority?: TaskPriority;
   due_date?: string | null;
+  tags?: string[];
+  recurrence_pattern?: RecurrencePattern;
 }
 
 /**
@@ -43,6 +52,8 @@ export interface UpdateTaskData {
   description?: string;
   priority?: TaskPriority;
   due_date?: string | null;
+  tags?: string[];
+  recurrence_pattern?: RecurrencePattern;
 }
 
 /**
@@ -90,6 +101,8 @@ export function transformTask(apiTask: {
   completed: boolean;
   priority: TaskPriority;
   due_date: string | null;
+  tags: string[];
+  recurrence_pattern: RecurrencePattern;
   created_at: string;
   updated_at: string;
 }): Task {
@@ -101,6 +114,8 @@ export function transformTask(apiTask: {
     completed: apiTask.completed,
     priority: apiTask.priority,
     dueDate: apiTask.due_date,
+    tags: apiTask.tags ?? [],
+    recurrencePattern: apiTask.recurrence_pattern ?? "none",
     createdAt: apiTask.created_at,
     updatedAt: apiTask.updated_at,
   };

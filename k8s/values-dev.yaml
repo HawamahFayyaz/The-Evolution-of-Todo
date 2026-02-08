@@ -1,0 +1,65 @@
+# =============================================================================
+# HACKATHON TODO - Minikube Development Overrides
+# =============================================================================
+# Usage: helm install todo-app k8s/ -f k8s/values-dev.yaml
+# =============================================================================
+
+backend:
+  replicaCount: 1
+
+  image:
+    pullPolicy: Never  # Use local Minikube images
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+frontend:
+  replicaCount: 1
+
+  image:
+    pullPolicy: Never  # Use local Minikube images
+
+  service:
+    type: NodePort
+    nodePort: 30080
+
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+# Disable autoscaling for local dev
+autoscaling:
+  enabled: false
+
+# Disable ingress for local dev (use NodePort directly)
+ingress:
+  enabled: false
+
+# Override config for local
+config:
+  backend:
+    HOST: "0.0.0.0"
+    PORT: "8000"
+    ALLOWED_ORIGINS: "http://localhost:30080,http://127.0.0.1:30080,http://localhost:3000"
+    OPENAI_MODEL: "gpt-4o-mini"
+    OPENAI_MAX_TOKENS: "4096"
+    OPENAI_TEMPERATURE: "0.7"
+    MAX_HISTORY_MESSAGES: "50"
+    RATE_LIMIT_REQUESTS: "10"
+    RATE_LIMIT_WINDOW_SECONDS: "60"
+    SYSTEM_PROMPT: |
+      You are a helpful task management assistant. You can help users create,
+      update, search, and manage their tasks. Be concise and action-oriented.
+
+  frontend:
+    NEXT_PUBLIC_API_URL: "http://todo-backend:8000"
+    NEXT_PUBLIC_APP_URL: "http://localhost:30080"

@@ -4,7 +4,7 @@
  * Provides type-safe functions for task CRUD operations.
  */
 
-import type { CreateTaskData, Task, TaskPriority, UpdateTaskData } from "@/types";
+import type { CreateTaskData, Task, TaskPriority, RecurrencePattern, UpdateTaskData } from "@/types";
 import { apiClient } from "./client";
 
 /** Backend API response (snake_case) */
@@ -16,6 +16,8 @@ interface ApiTask {
   completed: boolean;
   priority: TaskPriority;
   due_date: string | null;
+  tags: string[];
+  recurrence_pattern: RecurrencePattern;
   created_at: string;
   updated_at: string;
 }
@@ -40,6 +42,8 @@ function toTask(apiTask: ApiTask): Task {
     completed: apiTask.completed,
     priority: apiTask.priority,
     dueDate: apiTask.due_date,
+    tags: apiTask.tags ?? [],
+    recurrencePattern: apiTask.recurrence_pattern ?? "none",
     createdAt: apiTask.created_at,
     updatedAt: apiTask.updated_at,
   };

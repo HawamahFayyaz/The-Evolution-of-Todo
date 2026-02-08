@@ -12,7 +12,7 @@ from sqlmodel import Session, select
 
 from auth import get_current_user
 from database import get_session
-from models import Task, TaskPriority
+from models import Task, TaskPriority, RecurrencePattern
 from rate_limiter import limiter, RATE_LIMITS
 from security_logger import security_logger
 
@@ -27,6 +27,8 @@ class TaskCreate(BaseModel):
     description: str = Field(default="", max_length=1000)
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM)
     due_date: datetime | None = Field(default=None)
+    tags: list[str] = Field(default_factory=list)
+    recurrence_pattern: RecurrencePattern = Field(default=RecurrencePattern.NONE)
 
 
 class TaskUpdate(BaseModel):
@@ -37,6 +39,8 @@ class TaskUpdate(BaseModel):
     completed: bool | None = None
     priority: TaskPriority | None = None
     due_date: datetime | None = None
+    tags: list[str] | None = None
+    recurrence_pattern: RecurrencePattern | None = None
 
 
 class TaskResponse(BaseModel):
@@ -48,6 +52,8 @@ class TaskResponse(BaseModel):
     completed: bool
     priority: TaskPriority
     due_date: datetime | None
+    tags: list[str]
+    recurrence_pattern: RecurrencePattern
     created_at: datetime
     updated_at: datetime
 
@@ -254,12 +260,16 @@ async def create_task(
         TaskResponse: The created task.
     """
     # User ID comes from JWT token - never from request body
+    # Sanitize tags: strip whitespace, lowercase, remove empty
+    clean_tags = list({t.strip().lower() for t in task_data.tags if t.strip()})
     task = Task(
         user_id=current_user,
         title=task_data.title,
         description=task_data.description,
         priority=task_data.priority,
         due_date=task_data.due_date,
+        tags=clean_tags,
+        recurrence_pattern=task_data.recurrence_pattern,
     )
 
     session.add(task)
@@ -306,6 +316,10 @@ async def update_task(
         task.priority = task_data.priority
     if task_data.due_date is not None:
         task.due_date = task_data.due_date
+    if task_data.tags is not None:
+        task.tags = list({t.strip().lower() for t in task_data.tags if t.strip()})
+    if task_data.recurrence_pattern is not None:
+        task.recurrence_pattern = task_data.recurrence_pattern
 
     task.updated_at = datetime.now(UTC)
 
@@ -374,6 +388,30 @@ async def toggle_task_completion(
     task.updated_at = datetime.now(UTC)
 
     session.add(task)
+
+    # If completing a recurring task, auto-create next occurrence
+    if task.completed and task.recurrence_pattern != RecurrencePattern.NONE:
+        from dateutil.relativedelta import relativedelta
+
+        next_due = task.due_date or datetime.now(UTC)
+        if task.recurrence_pattern == RecurrencePattern.DAILY:
+            next_due = next_due + relativedelta(days=1)
+        elif task.recurrence_pattern == RecurrencePattern.WEEKLY:
+            next_due = next_due + relativedelta(weeks=1)
+        elif task.recurrence_pattern == RecurrencePattern.MONTHLY:
+            next_due = next_due + relativedelta(months=1)
+
+        next_task = Task(
+            user_id=current_user,
+            title=task.title,
+            description=task.description,
+            priority=task.priority,
+            due_date=next_due,
+            tags=task.tags[:] if task.tags else [],
+            recurrence_pattern=task.recurrence_pattern,
+        )
+        session.add(next_task)
+
     session.commit()
     session.refresh(task)
 

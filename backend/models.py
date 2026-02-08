@@ -5,7 +5,7 @@ from enum import Enum
 from functools import partial
 from typing import ClassVar
 
-from sqlalchemy import Index
+from sqlalchemy import Column, Index, JSON
 from sqlmodel import Field, SQLModel
 
 
@@ -75,6 +75,15 @@ class TaskPriority(str, Enum):
     HIGH = "high"
 
 
+class RecurrencePattern(str, Enum):
+    """Task recurrence patterns."""
+
+    NONE = "none"
+    DAILY = "daily"
+    WEEKLY = "weekly"
+    MONTHLY = "monthly"
+
+
 class Task(SQLModel, table=True):
     """Task entity representing a user's to-do item.
 
@@ -122,6 +131,8 @@ class Task(SQLModel, table=True):
     completed: bool = Field(default=False, index=True)
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM, index=True)
     due_date: datetime | None = Field(default=None, index=True)
+    tags: list[str] = Field(default_factory=list, sa_column=Column(JSON, server_default="[]"))
+    recurrence_pattern: RecurrencePattern = Field(default=RecurrencePattern.NONE)
     created_at: datetime = Field(default_factory=partial(datetime.now, UTC), index=True)
     updated_at: datetime = Field(default_factory=partial(datetime.now, UTC))
     deleted_at: datetime | None = Field(default=None, index=True)
@@ -137,6 +148,8 @@ class TaskCreate(SQLModel):
     description: str = Field(default="", max_length=1000)
     priority: TaskPriority = Field(default=TaskPriority.MEDIUM)
     due_date: datetime | None = Field(default=None)
+    tags: list[str] = Field(default_factory=list)
+    recurrence_pattern: RecurrencePattern = Field(default=RecurrencePattern.NONE)
 
 
 class TaskUpdate(SQLModel):
@@ -149,6 +162,8 @@ class TaskUpdate(SQLModel):
     description: str | None = Field(default=None, max_length=1000)
     priority: TaskPriority | None = Field(default=None)
     due_date: datetime | None = Field(default=None)
+    tags: list[str] | None = Field(default=None)
+    recurrence_pattern: RecurrencePattern | None = Field(default=None)
 
 
 class TaskResponse(SQLModel):
@@ -161,5 +176,7 @@ class TaskResponse(SQLModel):
     completed: bool
     priority: TaskPriority
     due_date: datetime | None
+    tags: list[str]
+    recurrence_pattern: RecurrencePattern
     created_at: datetime
     updated_at: datetime

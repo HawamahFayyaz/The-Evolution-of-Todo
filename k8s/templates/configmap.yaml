@@ -1,0 +1,25 @@
+{{- if .Values.backend.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hackathon-todo.backend.configmapName" . }}
+  labels:
+    {{- include "hackathon-todo.backend.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config.backend }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}
+---
+{{- if .Values.frontend.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hackathon-todo.frontend.configmapName" . }}
+  labels:
+    {{- include "hackathon-todo.frontend.labels" . | nindent 4 }}
+data:
+  {{- range $key, $value := .Values.config.frontend }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}
+{{- end }}

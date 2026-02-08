@@ -3,7 +3,7 @@
 import { useState } from "react";
 import type { Task, TaskPriority } from "@/types";
 import { cn } from "@/lib/utils";
-import { Check, Pencil, Trash2, Calendar, Flag } from "lucide-react";
+import { Check, Pencil, Trash2, Calendar, Flag, Repeat } from "lucide-react";
 
 interface TaskItemProps {
   task: Task;
@@ -17,6 +17,27 @@ const PRIORITY_CONFIG: Record<TaskPriority, { label: string; color: string; icon
   medium: { label: "Medium", color: "bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", iconColor: "text-amber-500" },
   high: { label: "High", color: "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-400", iconColor: "text-red-500" },
 };
+
+const RECURRENCE_LABELS: Record<string, string> = {
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+
+const TAG_COLORS = [
+  "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+  "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+  "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  "bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400",
+  "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
+  "bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400",
+];
+
+function getTagColor(tag: string): string {
+  let hash = 0;
+  for (let i = 0; i < tag.length; i++) hash = tag.charCodeAt(i) + ((hash << 5) - hash);
+  return TAG_COLORS[Math.abs(hash) % TAG_COLORS.length];
+}
 
 function isOverdue(dateStr: string | null): boolean {
   if (!dateStr) return false;
@@ -33,9 +54,21 @@ function formatDueDate(dateStr: string | null): string {
   today.setHours(0, 0, 0, 0);
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
-  if (date.toDateString() === today.toDateString()) return "Today";
-  if (date.toDateString() === tomorrow.toDateString()) return "Tomorrow";
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  let label: string;
+  if (date.toDateString() === today.toDateString()) label = "Today";
+  else if (date.toDateString() === tomorrow.toDateString()) label = "Tomorrow";
+  else label = date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+  // Include time if not midnight
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  if (hours !== 23 || minutes !== 59) {
+    const timeStr = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+    label += ` ${timeStr}`;
+  }
+
+  return label;
 }
 
 export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
@@ -121,6 +154,24 @@ export function TaskItem({ task, onToggle, onEdit, onDelete }: TaskItemProps) {
               {overdue && " (Overdue)"}
             </span>
           )}
+
+          {/* Recurrence badge */}
+          {task.recurrencePattern && task.recurrencePattern !== "none" && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-violet-50 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400">
+              <Repeat className="w-3 h-3" />
+              {RECURRENCE_LABELS[task.recurrencePattern]}
+            </span>
+          )}
+
+          {/* Tags */}
+          {task.tags && task.tags.length > 0 && task.tags.map(tag => (
+            <span
+              key={tag}
+              className={cn("inline-flex items-center px-2 py-0.5 rounded-md text-[11px] font-medium", getTagColor(tag))}
+            >
+              {tag}
+            </span>
+          ))}
         </div>
       </div>
 
