@@ -16,6 +16,7 @@ from config import get_settings
 from database import create_db_and_tables, get_session
 from rate_limiter import limiter, rate_limit_exceeded_handler
 from routes.tasks import router as tasks_router
+from routes.chat import router as chat_router
 
 
 # Structured error response format
@@ -82,6 +83,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(tasks_router)
+app.include_router(chat_router)
 
 
 # Exception handlers for structured error responses
