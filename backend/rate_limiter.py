@@ -75,6 +75,10 @@ RATE_LIMITS = {
     "tasks_update": "30/minute",
     "tasks_delete": "30/minute",
 
+    # Chat endpoints
+    "chat_send": "10/minute",
+    "chat_history": "30/minute",
+
     # General API limit
     "default": "100/minute",
 }

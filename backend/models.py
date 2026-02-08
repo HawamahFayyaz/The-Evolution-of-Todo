@@ -9,6 +9,64 @@ from sqlalchemy import Index
 from sqlmodel import Field, SQLModel
 
 
+class Conversation(SQLModel, table=True):
+    """Conversation entity for chat sessions.
+
+    Attributes:
+        id: Unique conversation identifier (auto-generated).
+        user_id: Owner's user ID from session token (indexed).
+        created_at: Timestamp of conversation creation (UTC).
+        updated_at: Timestamp of last message (UTC).
+        deleted_at: Soft delete timestamp (nullable, UTC).
+
+    Indexes:
+        - ix_conversations_user_active: Composite for listing active conversations.
+    """
+
+    __tablename__ = "conversations"
+
+    __table_args__: ClassVar[tuple] = (
+        Index("ix_conversations_user_active", "user_id", "deleted_at", "updated_at"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    user_id: str = Field(index=True, min_length=1, max_length=255)
+    created_at: datetime = Field(default_factory=partial(datetime.now, UTC))
+    updated_at: datetime = Field(default_factory=partial(datetime.now, UTC))
+    deleted_at: datetime | None = Field(default=None, index=True)
+
+
+class Message(SQLModel, table=True):
+    """Message entity for chat conversation messages.
+
+    Attributes:
+        id: Unique message identifier (auto-generated).
+        conversation_id: FK to conversations.id (indexed).
+        user_id: Owner's user ID from session token (indexed).
+        role: Message role - 'user' or 'assistant'.
+        content: Message text content.
+        tool_calls_json: JSON-serialized tool call data (nullable).
+        created_at: Timestamp of message creation (UTC).
+
+    Indexes:
+        - ix_messages_conversation_created: Composite for loading conversation history.
+    """
+
+    __tablename__ = "messages"
+
+    __table_args__: ClassVar[tuple] = (
+        Index("ix_messages_conversation_created", "conversation_id", "created_at"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    conversation_id: int = Field(foreign_key="conversations.id", index=True)
+    user_id: str = Field(index=True, min_length=1, max_length=255)
+    role: str = Field(max_length=50)
+    content: str
+    tool_calls_json: str | None = Field(default=None)
+    created_at: datetime = Field(default_factory=partial(datetime.now, UTC))
+
+
 class TaskPriority(str, Enum):
     """Task priority levels."""
 
