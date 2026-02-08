@@ -61,11 +61,14 @@ def verify_session_token(token: str, db: Session) -> str:
     user_id, expires_at = result
 
     # Check if session is expired
-    # Handle both timezone-aware and naive datetimes from database
+    # Handle timezone-aware, naive, and string datetimes from database
     if expires_at:
         now = datetime.now(timezone.utc)
+        # SQLite may return datetime as string
+        if isinstance(expires_at, str):
+            expires_at = datetime.fromisoformat(expires_at).replace(tzinfo=timezone.utc)
         # If expires_at is naive (no timezone), assume it's UTC
-        if expires_at.tzinfo is None:
+        elif expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
         if expires_at < now:
             raise AuthenticationError(
